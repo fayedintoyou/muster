@@ -6,6 +6,7 @@ import {
   cleanMarks,
   cleanPersonRoles,
   cleanNote,
+  cleanPersonClass,
   cleanSpec,
   nameKey,
   validateName,
@@ -25,6 +26,8 @@ interface StoredPerson {
   name: string;
   key: string;
   roles: string[];
+  /** Missing on people who answered before there were classes. */
+  cls?: string;
   /** Missing on people who answered before there was a spec. */
   spec?: string;
   /** Missing on people who answered before there were notes. */
@@ -52,6 +55,7 @@ export interface JoinInput {
   name?: unknown;
   password?: unknown;
   roles?: unknown;
+  cls?: unknown;
   spec?: unknown;
   note?: unknown;
   /** Times marked before joining, so a new person's answers arrive in one step. */
@@ -63,6 +67,7 @@ export interface JoinInput {
 export interface SaveInput {
   marks?: unknown;
   roles?: unknown;
+  cls?: unknown;
   spec?: unknown;
   note?: unknown;
   name?: unknown;
@@ -80,6 +85,7 @@ function publicPerson(p: StoredPerson): Person {
     id: p.id,
     name: p.name,
     roles: p.roles,
+    cls: p.cls ?? '',
     spec: p.spec ?? '',
     note: p.note ?? '',
     marks: p.marks,
@@ -94,7 +100,9 @@ export class PollObject extends DurableObject<Env> {
   }
 
   private poll(): Poll | undefined {
-    return this.kv.get<Poll>('poll');
+    const poll = this.kv.get<Poll>('poll');
+    // Polls made before there were classes have none.
+    return poll && { ...poll, classes: poll.classes ?? [] };
   }
 
   private people(): StoredPerson[] {
@@ -196,6 +204,7 @@ export class PollObject extends DurableObject<Env> {
       name: name.value,
       key,
       roles: cleanPersonRoles(input.roles, poll.roles),
+      cls: cleanPersonClass(input.cls, poll.classes),
       spec: cleanSpec(input.spec),
       note: cleanNote(input.note),
       marks: marks?.ok ? marks.value : {},
@@ -231,6 +240,7 @@ export class PollObject extends DurableObject<Env> {
       person.marks = marks.value;
     }
     if (input.roles !== undefined) person.roles = cleanPersonRoles(input.roles, poll.roles);
+    if (input.cls !== undefined) person.cls = cleanPersonClass(input.cls, poll.classes);
     if (input.spec !== undefined) person.spec = cleanSpec(input.spec);
     if (input.note !== undefined) person.note = cleanNote(input.note);
     if (input.name !== undefined) {
@@ -277,11 +287,12 @@ export class PollObject extends DurableObject<Env> {
       return fail(400, 'Slot size can’t change once people have answered.');
     }
     this.kv.put('poll', { ...next, id: poll.id, created: poll.created, updated: Date.now() } satisfies Poll);
-    // Roles taken away come off people too.
-    if (next.roles.join() !== poll.roles.join()) {
+    // Roles and classes taken away come off people too.
+    if (next.roles.join() !== poll.roles.join() || next.classes.join() !== poll.classes.join()) {
       for (const p of this.people()) {
         const roles = p.roles.filter((r) => next.roles.includes(r));
-        if (roles.length !== p.roles.length) this.kv.put(`p:${p.id}`, { ...p, roles });
+        const cls = p.cls && next.classes.includes(p.cls) ? p.cls : '';
+        if (roles.length !== p.roles.length || cls !== (p.cls ?? '')) this.kv.put(`p:${p.id}`, { ...p, roles, cls });
       }
     }
     this.bump();

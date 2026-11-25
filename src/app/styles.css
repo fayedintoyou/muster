@@ -614,6 +614,18 @@ option { background: var(--wall); color: var(--ink); }
 .my-spec input { padding: 0.4rem 0.6rem; font-size: 0.9375rem; }
 .join { margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--line); }
 .person-spec { color: var(--ink); opacity: 0.75; }
+
+/* Classes, in WoW's class colours: text in the colour, and a chip lit with it once picked. */
+.class-name { color: var(--class, var(--ink)); }
+.class-chip { color: var(--class, var(--muted)); border-color: color-mix(in srgb, var(--class, var(--ink)) 40%, transparent); }
+.class-chip:hover { color: var(--class, var(--ink)); border-color: var(--class, var(--brass)); }
+.class-chip[aria-pressed='true'],
+.class-chip[aria-pressed='true']:hover { background: var(--class, var(--lamp)); border-color: var(--class, var(--lamp)); color: var(--night); }
+.class-picker { display: grid; gap: 1.15rem; }
+.my-class { margin-top: 1.1rem; max-width: 34rem; }
+.my-class .class-picker .chip { min-height: 2.1rem; padding: 0.2rem 0.7rem; }
+.composition { font-family: var(--mono); font-size: 0.75rem; letter-spacing: 0.02em; line-height: 1.7; margin: -0.2rem 0 0.75rem; }
+.best-classes { font-family: var(--mono); font-size: 0.75rem; letter-spacing: 0.02em; margin: 0; }
 .person-note {
   grid-area: note;
   margin: 0.3rem 0 0 1.7rem;

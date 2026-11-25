@@ -10,6 +10,7 @@ export const LIMITS = {
   dates: 31,
   slots: 1000,
   roles: 6,
+  classes: 12,
   role: 16,
   name: 32,
   spec: 40,
@@ -42,8 +43,17 @@ export function nameKey(name: string): string {
 }
 
 export function cleanRoles(value: unknown): Result<string[]> {
+  return cleanList(value, LIMITS.roles, 'roles');
+}
+
+export function cleanClasses(value: unknown): Result<string[]> {
+  return cleanList(value, LIMITS.classes, 'classes');
+}
+
+/** A short list of lowercase names, such as roles or classes, without repeats. */
+function cleanList(value: unknown, max: number, what: string): Result<string[]> {
   if (value === undefined || value === null) return ok([]);
-  if (!Array.isArray(value)) return fail('Roles must be a list.');
+  if (!Array.isArray(value)) return fail(`The ${what} must be a list.`);
   const out: string[] = [];
   const seen = new Set<string>();
   for (const raw of value) {
@@ -53,7 +63,7 @@ export function cleanRoles(value: unknown): Result<string[]> {
     seen.add(role);
     out.push(role);
   }
-  if (out.length > LIMITS.roles) return fail(`At most ${LIMITS.roles} roles.`);
+  if (out.length > max) return fail(`At most ${max} ${what}.`);
   return ok(out);
 }
 
@@ -120,6 +130,8 @@ export function validateSettings(input: unknown, now = Date.now()): Result<PollS
 
   const roles = cleanRoles(raw.roles);
   if (!roles.ok) return roles;
+  const classes = cleanClasses(raw.classes);
+  if (!classes.ok) return classes;
 
   let length = Number(raw.length);
   if (!Number.isFinite(length)) length = 180;
@@ -128,7 +140,7 @@ export function validateSettings(input: unknown, now = Date.now()): Result<PollS
     return fail('Raid length must be between 15 minutes and 12 hours.');
   }
 
-  return ok({ title, notes, mode, days, start, end, slot, tz, roles: roles.value, length });
+  return ok({ title, notes, mode, days, start, end, slot, tz, roles: roles.value, classes: classes.value, length });
 }
 
 export function validateName(input: unknown): Result<string> {
@@ -165,6 +177,12 @@ export function cleanSpec(input: unknown): string {
 /** A person's note to the organizer. Optional; line breaks are kept. */
 export function cleanNote(input: unknown): string {
   return cleanText(input, LIMITS.note);
+}
+
+/** The class a person picked, if it's one of the poll's; otherwise none. */
+export function cleanPersonClass(input: unknown, pollClasses: string[]): string {
+  const cls = cleanLine(input, LIMITS.role).toLocaleLowerCase('en-US');
+  return pollClasses.includes(cls) ? cls : '';
 }
 
 /** Roles a person picked, kept to the poll's own. */

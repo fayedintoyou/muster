@@ -6,6 +6,7 @@ import { formatDate, formatDuration, formatRange, formatTime, weekdayName } from
 import { MINUTE } from '../core/time';
 import { discordTimestamps, nextOccurrence } from '../core/occurrence';
 import { useCopied } from './copy';
+import { Composition } from './Composition';
 
 const LENGTHS = Array.from({ length: 16 }, (_, i) => (i + 1) * 30);
 
@@ -117,6 +118,11 @@ export function BestTimes({
                     ))}
                   </ul>
                 )}
+                <Composition
+                  people={people.filter((p) => c.attend.includes(p.id))}
+                  classes={poll.classes}
+                  className="best-classes"
+                />
                 {c.missing.length > 0 && (
                   <p className="best-missing">
                     Not free: {names(c.missing, nameOf)}.
