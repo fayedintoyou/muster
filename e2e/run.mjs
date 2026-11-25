@@ -126,14 +126,12 @@ try {
   assert.ok(await p1.locator('.panel-mine .first-steps').isVisible(), 'a first-time visitor sees how answering works');
   assert.ok(await p1.locator('.panel-mine .paint .cell').first().isVisible(), 'the grid to mark is there before joining');
   assert.ok(await p1.locator('.how.first').isVisible(), 'the first-time drag hint shows before any marks');
-  assert.equal(await p1.locator('.paint-wrap[data-demo]').count(), 1, 'the demo drag plays before any marks');
   assert.equal(await p1.locator('.next-step').count(), 0, 'no next step before any marks');
   await shot(p1, '02-made-phone');
 
   const cdp = await phone.newCDPSession(p1);
   // Drag Tue 8pm → Wed 10:30pm: two nights, six half hours each.
   await touchDrag(p1, cdp, '.paint .cell[data-key="w2/1200"]', '.paint .cell[data-key="w3/1350"]');
-  assert.equal(await p1.locator('.paint-wrap[data-demo]').count(), 0, 'the demo stops once times are marked');
   // Then Thu 9pm and 9:30pm as "if needed", by tapping.
   await p1.click('.tool button:text("if needed")');
   await tap(p1, cdp, '.paint .cell[data-key="w4/1260"]');
@@ -204,6 +202,14 @@ try {
   watch(p2, 'desk');
   await p2.goto(pollUrl);
   await p2.waitForSelector('.paint .cell');
+  // Before answering, a wide screen shows only your own grid: everyone's waits, so nobody tries to mark it.
+  assert.equal(await p2.locator('.panel-group').isVisible(), false, 'everyone’s grid waits until you’ve answered');
+  assert.equal(await p2.locator('.panel-best').isVisible(), false, 'and best times too');
+  assert.match(await p2.locator('.panel-peek').innerText(), /1 person has answered so far/);
+  await shot(p2, '04a-desk-before-answering', false);
+  await p2.click('.panel-peek button:text("show them now")');
+  assert.ok(await p2.locator('.panel-group .heat .cell').first().isVisible(), 'but you can look first if you ask');
+  assert.equal(await p2.locator('.panel-peek').count(), 0);
   const rowLabel = await p2.locator('.paint .row-head').first().innerText();
   assert.match(rowLabel, /^02:00/, `Berlin sees the 8pm ET start as 02:00 (got ${rowLabel})`);
   assert.match(await p2.locator('.topbar .zone-current').innerText(), /^Berlin/, 'zones outside the US keep their city');
