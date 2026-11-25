@@ -37,7 +37,9 @@ export interface Person {
   roles: string[];
   /** One of the poll's classes, or empty. */
   cls: string;
-  /** Free text, such as a class and spec. Empty when not given. */
+  /** Up to two specs of their class. */
+  specs: string[];
+  /** Free text from before there were spec buttons, such as "Resto shaman". Empty for anyone since. */
   spec: string;
   /** Anything they'd like the organizer to know, such as "Fridays I'm 30 minutes late". Empty when not given. */
   note: string;

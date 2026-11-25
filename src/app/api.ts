@@ -57,6 +57,7 @@ export const api = {
       password?: string;
       roles?: string[];
       cls?: string;
+      specs?: string[];
       spec?: string;
       note?: string;
       marks?: Marks;
@@ -72,7 +73,7 @@ export const api = {
     id: string,
     personId: string,
     auth: { token?: string; admin?: string },
-    input: { marks?: Marks; roles?: string[]; cls?: string; spec?: string; note?: string; name?: string; password?: string },
+    input: { marks?: Marks; roles?: string[]; cls?: string; specs?: string[]; spec?: string; note?: string; name?: string; password?: string },
     keepalive = false,
   ) {
     return call<{ person: Person; version: number }>(`/api/polls/${id}/people/${personId}`, {

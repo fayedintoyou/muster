@@ -6,8 +6,8 @@ import { store } from './store';
 import { ClassPicker } from './ClassPicker';
 import { RoleIcon } from './icons';
 
-// Who's answering, after they've marked their times: a name or in-game handle, the roles they'd bring
-// and, if they like, a class and spec. Saving sends the times along with it.
+// Who's answering, after they've marked their times: a name or in-game handle, their class and a spec or
+// two (which say what roles they bring), and a note if they like. Saving sends the times along with it.
 export function JoinForm({
   poll,
   marks,
@@ -21,7 +21,9 @@ export function JoinForm({
   const [name, setName] = useState(() => store.lastName());
   const [roles, setRoles] = useState<string[]>(() => store.lastRoles().filter((r) => poll.roles.includes(r)));
   const [cls, setCls] = useState(() => (poll.classes.includes(store.lastClass()) ? store.lastClass() : ''));
-  const [spec, setSpec] = useState(() => store.lastSpec());
+  const [specs, setSpecs] = useState<string[]>(() => (cls ? store.lastSpecs() : []));
+  const [classMissing, setClassMissing] = useState<'class' | 'spec' | null>(null);
+  const pickerRef = useRef<HTMLDivElement>(null);
   const [note, setNote] = useState('');
   const marked = Object.keys(marks).length;
   const [nameMissing, setNameMissing] = useState(false);
@@ -39,17 +41,19 @@ export function JoinForm({
       const result = await api.join(poll.id, {
         name,
         password: password || undefined,
-        roles,
-        cls,
-        spec,
+        roles: poll.classes.length ? undefined : roles,
+        cls: poll.classes.length ? cls : undefined,
+        specs: poll.classes.length ? specs : undefined,
         note,
         marks,
         claim: asExisting,
       });
       store.setLastName(result.person.name);
       if (roles.length) store.setLastRoles(roles);
-      store.setLastSpec(spec.trim());
-      if (cls) store.setLastClass(cls);
+      if (cls) {
+        store.setLastClass(cls);
+        store.setLastSpecs(specs);
+      }
       onJoined(result.person, result.token, result.state);
     } catch (err) {
       if (err instanceof ApiError && err.status === 409 && err.extra.exists) {
@@ -70,6 +74,15 @@ export function JoinForm({
       nameField.current?.focus();
       nameField.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
       return;
+    }
+    // Class and spec too, on a poll that asks for them (not when signing in as someone who's answered).
+    if (!claim && poll.classes.length) {
+      const missing = !cls ? 'class' : specs.length === 0 ? 'spec' : null;
+      setClassMissing(missing);
+      if (missing) {
+        pickerRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        return;
+      }
     }
     void join(claim !== null);
   };
@@ -147,7 +160,7 @@ export function JoinForm({
         )}
         <p className="hint">Answered already on another device? Use the same name to pick up where you left off.</p>
       </div>
-      {poll.roles.length > 0 && (
+      {poll.classes.length === 0 && poll.roles.length > 0 && (
         <fieldset className="field">
           <legend>What do you play?</legend>
           <div className="day-chips">
@@ -167,29 +180,18 @@ export function JoinForm({
           <p className="hint">Pick every role you’d bring.</p>
         </fieldset>
       )}
-      {poll.classes.length > 0 ? (
-        <ClassPicker
-          classes={poll.classes}
-          cls={cls}
-          spec={spec}
-          idPrefix="join"
-          onChange={(c, s) => {
-            setCls(c);
-            setSpec(s);
-          }}
-        />
-      ) : (
-        <div className="field">
-          <label htmlFor="join-spec">
-            Class and spec <span className="muted">(optional)</span>
-          </label>
-          <input
-            id="join-spec"
-            value={spec}
-            onChange={(e) => setSpec(e.target.value)}
-            maxLength={LIMITS.spec}
-            autoComplete="off"
-            placeholder="Resto shaman, or a main and an alt"
+      {poll.classes.length > 0 && (
+        <div ref={pickerRef}>
+          <ClassPicker
+            classes={poll.classes}
+            cls={cls}
+            specs={specs}
+            idPrefix="join"
+            missing={classMissing && (classMissing === 'class' ? (cls ? null : 'class') : specs.length ? null : 'spec')}
+            onChange={(c, s) => {
+              setCls(c);
+              setSpecs(s);
+            }}
           />
         </div>
       )}

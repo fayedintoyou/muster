@@ -1,16 +1,17 @@
 import { DurableObject } from 'cloudflare:workers';
 import type { Person, Poll, PollSettings, PollState } from '../src/core/types';
 import { slotKeys } from '../src/core/slots';
+import { ROLES, WOW_CLASSES, rolesFor } from '../src/core/classes';
 import {
   LIMITS,
   cleanMarks,
   cleanPersonRoles,
   cleanNote,
-  cleanPersonClass,
   cleanSpec,
   nameKey,
   validateName,
   validatePassword,
+  validateClass,
   validateSettings,
 } from '../src/core/validate';
 import { hashPassword, randomId, randomToken, sameHash, sha256 } from './crypto';
@@ -28,6 +29,8 @@ interface StoredPerson {
   roles: string[];
   /** Missing on people who answered before there were classes. */
   cls?: string;
+  /** Missing on people who answered before they picked specs. */
+  specs?: string[];
   /** Missing on people who answered before there was a spec. */
   spec?: string;
   /** Missing on people who answered before there were notes. */
@@ -56,6 +59,7 @@ export interface JoinInput {
   password?: unknown;
   roles?: unknown;
   cls?: unknown;
+  specs?: unknown;
   spec?: unknown;
   note?: unknown;
   /** Times marked before joining, so a new person's answers arrive in one step. */
@@ -68,6 +72,7 @@ export interface SaveInput {
   marks?: unknown;
   roles?: unknown;
   cls?: unknown;
+  specs?: unknown;
   spec?: unknown;
   note?: unknown;
   name?: unknown;
@@ -86,6 +91,7 @@ function publicPerson(p: StoredPerson): Person {
     name: p.name,
     roles: p.roles,
     cls: p.cls ?? '',
+    specs: p.specs ?? [],
     spec: p.spec ?? '',
     note: p.note ?? '',
     marks: p.marks,
@@ -101,8 +107,13 @@ export class PollObject extends DurableObject<Env> {
 
   private poll(): Poll | undefined {
     const poll = this.kv.get<Poll>('poll');
-    // Polls made before there were classes have none.
-    return poll && { ...poll, classes: poll.classes ?? [] };
+    if (!poll) return undefined;
+    // Polls made before there were classes ask for them now (every poll so far is a WoW guild's), with
+    // tank, healer and dps counted from the specs if they weren't counting roles already.
+    if (poll.classes === undefined) {
+      return { ...poll, classes: [...WOW_CLASSES], roles: poll.roles.length ? poll.roles : [...ROLES] };
+    }
+    return poll;
   }
 
   private people(): StoredPerson[] {
@@ -196,6 +207,13 @@ export class PollObject extends DurableObject<Env> {
     if (people.length >= LIMITS.people) return fail(400, `This poll is full (${LIMITS.people} people).`);
     const marks = input.marks === undefined ? undefined : cleanMarks(input.marks, new Set(slotKeys(poll)));
     if (marks && !marks.ok) return fail(400, marks.error);
+    // A poll that asks for classes needs a class and a spec or two; the roles come from the specs.
+    let who = { cls: '', specs: [] as string[], roles: cleanPersonRoles(input.roles, poll.roles) };
+    if (poll.classes.length) {
+      const picked = validateClass(input.cls, input.specs, poll.classes);
+      if (!picked.ok) return fail(400, picked.error);
+      who = { ...picked.value, roles: rolesFor(picked.value.cls, picked.value.specs).filter((r) => poll.roles.includes(r)) };
+    }
     let id = randomId();
     while (this.kv.get(`p:${id}`)) id = randomId();
     const now = Date.now();
@@ -203,8 +221,9 @@ export class PollObject extends DurableObject<Env> {
       id,
       name: name.value,
       key,
-      roles: cleanPersonRoles(input.roles, poll.roles),
-      cls: cleanPersonClass(input.cls, poll.classes),
+      roles: who.roles,
+      cls: who.cls,
+      specs: who.specs,
       spec: cleanSpec(input.spec),
       note: cleanNote(input.note),
       marks: marks?.ok ? marks.value : {},
@@ -239,8 +258,17 @@ export class PollObject extends DurableObject<Env> {
       if (!marks.ok) return fail(400, marks.error);
       person.marks = marks.value;
     }
-    if (input.roles !== undefined) person.roles = cleanPersonRoles(input.roles, poll.roles);
-    if (input.cls !== undefined) person.cls = cleanPersonClass(input.cls, poll.classes);
+    if (poll.classes.length) {
+      if (input.cls !== undefined || input.specs !== undefined) {
+        const picked = validateClass(input.cls ?? person.cls, input.specs ?? person.specs ?? [], poll.classes);
+        if (!picked.ok) return fail(400, picked.error);
+        person.cls = picked.value.cls;
+        person.specs = picked.value.specs;
+        person.roles = rolesFor(person.cls, person.specs).filter((r) => poll.roles.includes(r));
+      }
+    } else if (input.roles !== undefined) {
+      person.roles = cleanPersonRoles(input.roles, poll.roles);
+    }
     if (input.spec !== undefined) person.spec = cleanSpec(input.spec);
     if (input.note !== undefined) person.note = cleanNote(input.note);
     if (input.name !== undefined) {
@@ -292,7 +320,7 @@ export class PollObject extends DurableObject<Env> {
       for (const p of this.people()) {
         const roles = p.roles.filter((r) => next.roles.includes(r));
         const cls = p.cls && next.classes.includes(p.cls) ? p.cls : '';
-        if (roles.length !== p.roles.length || cls !== (p.cls ?? '')) this.kv.put(`p:${p.id}`, { ...p, roles, cls });
+        if (roles.length !== p.roles.length || cls !== (p.cls ?? '')) this.kv.put(`p:${p.id}`, { ...p, roles, cls, specs: cls ? p.specs : [] });
       }
     }
     this.bump();
