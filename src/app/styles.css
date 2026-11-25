@@ -586,27 +586,16 @@ option { background: var(--wall); color: var(--ink); }
 .panel-heading { display: none; }
 
 @media (min-width: 960px) {
-  .tabs { display: none; }
-  .panels { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 2.5rem 3rem; align-items: start; }
-  .panels[data-tab] > .panel { display: block; }
-  .panel-heading { display: block; }
-  .panel-best { grid-column: 1 / -1; border-top: 1px solid var(--line); padding-top: 2rem; }
-}
-@media (min-width: 960px) and (max-width: 1279px) {
-  .best-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 2rem; }
+  .tabs { position: static; margin: 0 0 2rem; padding: 0; gap: 0.5rem; }
+  .tabs button { flex: 0 0 auto; padding: 0.3rem 1rem; font-size: 0.8125rem; }
+  .panel-mine { max-width: 38rem; }
+  /* Everyone: the grid, with who's free and the people beside it. */
+  .panel-group { display: grid; grid-template-columns: minmax(0, 36rem) minmax(16rem, 24rem); gap: 3rem; align-items: start; }
+  .panel-group > .empty { grid-column: 1 / -1; }
+  .group-side { position: sticky; top: 1.5rem; }
+  .group-side .slot-detail { min-height: 7.5rem; margin-top: 2.6rem; }
+  .best-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 2.5rem; max-width: 60rem; }
   .best-item { padding-inline: 0; }
-}
-@media (min-width: 1280px) {
-  .panels { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.9fr); gap: 2.5rem; }
-  .panel-best { grid-column: auto; border-top: 0; padding-top: 0; }
-}
-/* Before you've answered: your grid, wide, and a note where everyone's answers will be. */
-.panel-peek { color: var(--muted); font-size: 0.9375rem; }
-@media (min-width: 960px) {
-  .panels[data-answering] { grid-template-columns: minmax(0, 36rem) minmax(0, 18rem); gap: 3rem; }
-  .panels[data-answering] > .panel-group,
-  .panels[data-answering] > .panel-best { display: none; }
-  .panel-peek { position: sticky; top: 1.5rem; padding-left: 1.5rem; border-left: 1px solid var(--line); margin-top: 3.2rem; }
 }
 .group-hint { margin: -0.4rem 0 0.8rem; }
 
@@ -805,6 +794,8 @@ button.row-head:hover { color: var(--lamp); }
 .legend-ramp { flex: 0 1 9rem; height: 0.55rem; border-radius: 2px; }
 
 .slot-detail { margin-top: 0.9rem; }
+.slot-detail-idle { display: none; }
+@media (min-width: 960px) { .slot-detail-idle { display: block; } }
 .slot-detail:not(:empty) {
   padding: 0.75rem 0 0;
   border-top: 1px solid var(--line);
