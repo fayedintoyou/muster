@@ -126,14 +126,12 @@ try {
   assert.ok(await p1.locator('.panel-mine .first-steps').isVisible(), 'a first-time visitor sees how answering works');
   assert.ok(await p1.locator('.panel-mine .paint .cell').first().isVisible(), 'the grid to mark is there before joining');
   assert.ok(await p1.locator('.how.first').isVisible(), 'the first-time drag hint shows before any marks');
-  assert.equal(await p1.locator('.paint-wrap[data-demo]').count(), 1, 'the demo drag plays before any marks');
   assert.equal(await p1.locator('.next-step').count(), 0, 'no next step before any marks');
   await shot(p1, '02-made-phone');
 
   const cdp = await phone.newCDPSession(p1);
   // Drag Tue 8pm → Wed 10:30pm: two nights, six half hours each.
   await touchDrag(p1, cdp, '.paint .cell[data-key="w2/1200"]', '.paint .cell[data-key="w3/1350"]');
-  assert.equal(await p1.locator('.paint-wrap[data-demo]').count(), 0, 'the demo stops once times are marked');
   // Then Thu 9pm and 9:30pm as "if needed", by tapping.
   await p1.click('.tool button:text("if needed")');
   await tap(p1, cdp, '.paint .cell[data-key="w4/1260"]');

@@ -893,22 +893,6 @@ button.row-head:hover { color: var(--lamp); }
 @media (min-width: 960px) {
   .next-step .button { display: none; }
 }
-/* Nothing marked yet: a few windows of the first night light in turn, the way a drag would. */
-.paint-wrap[data-demo] .cell[data-c='0'][data-r='1'],
-.paint-wrap[data-demo] .cell[data-c='0'][data-r='2'],
-.paint-wrap[data-demo] .cell[data-c='0'][data-r='3'],
-.paint-wrap[data-demo] .cell[data-c='0'][data-r='4'] {
-  /* Twice, then still: a hint, not a grid that looks already filled in. */
-  animation: demo-drag 4.8s ease-in-out 2;
-}
-.paint-wrap[data-demo] .cell[data-c='0'][data-r='2'] { animation-delay: 220ms; }
-.paint-wrap[data-demo] .cell[data-c='0'][data-r='3'] { animation-delay: 440ms; }
-.paint-wrap[data-demo] .cell[data-c='0'][data-r='4'] { animation-delay: 660ms; }
-@keyframes demo-drag {
-  0%, 10% { background-color: var(--wall); }
-  20%, 60% { background-color: rgba(255, 179, 92, 0.5); }
-  75%, 100% { background-color: var(--wall); }
-}
 
 /* Admin */
 .admin { margin-top: 3.5rem; border-top: 1px solid var(--line); padding-top: 1.5rem; max-width: 40rem; }

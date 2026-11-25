@@ -450,7 +450,7 @@ export function PollPage({ id }: { id: string }) {
                 </div>
                 {toolbar}
                 {howTo}
-                <PaintGrid grid={grid} marks={myMarks} tool={tool} onChange={paint} demo={nothingMarked} />
+                <PaintGrid grid={grid} marks={myMarks} tool={tool} onChange={paint} />
                 {saveState === 'error' && (
                   <p className="error" role="alert">
                     Not saved: {saveError}{' '}
@@ -552,7 +552,7 @@ export function PollPage({ id }: { id: string }) {
                 </p>
                 {toolbar}
                 {howTo}
-                <PaintGrid grid={grid} marks={unsaved} tool={tool} onChange={setUnsaved} demo={nothingMarked} />
+                <PaintGrid grid={grid} marks={unsaved} tool={tool} onChange={setUnsaved} />
                 <JoinForm
                   poll={poll}
                   marks={unsaved}

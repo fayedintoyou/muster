@@ -24,14 +24,11 @@ export function PaintGrid({
   marks,
   tool,
   onChange,
-  demo = false,
 }: {
   grid: Grid;
   marks: Marks;
   tool: Mark;
   onChange: (marks: Marks) => void;
-  /** Nothing marked yet: the first night shows a drag lighting a few windows, as a hint. */
-  demo?: boolean;
 }) {
   const wrap = useRef<HTMLDivElement>(null);
   const drag = useRef<Drag | null>(null);
@@ -220,7 +217,6 @@ export function PaintGrid({
     <div
       ref={wrap}
       className="paint-wrap"
-      data-demo={demo || undefined}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerEnd}
