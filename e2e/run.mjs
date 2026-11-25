@@ -204,6 +204,14 @@ try {
   watch(p2, 'desk');
   await p2.goto(pollUrl);
   await p2.waitForSelector('.paint .cell');
+  // Before answering, a wide screen shows only your own grid: everyone's waits, so nobody tries to mark it.
+  assert.equal(await p2.locator('.panel-group').isVisible(), false, 'everyone’s grid waits until you’ve answered');
+  assert.equal(await p2.locator('.panel-best').isVisible(), false, 'and best times too');
+  assert.match(await p2.locator('.panel-peek').innerText(), /1 person has answered so far/);
+  await shot(p2, '04a-desk-before-answering', false);
+  await p2.click('.panel-peek button:text("show them now")');
+  assert.ok(await p2.locator('.panel-group .heat .cell').first().isVisible(), 'but you can look first if you ask');
+  assert.equal(await p2.locator('.panel-peek').count(), 0);
   const rowLabel = await p2.locator('.paint .row-head').first().innerText();
   assert.match(rowLabel, /^02:00/, `Berlin sees the 8pm ET start as 02:00 (got ${rowLabel})`);
   assert.match(await p2.locator('.topbar .zone-current').innerText(), /^Berlin/, 'zones outside the US keep their city');

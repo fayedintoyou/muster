@@ -49,6 +49,8 @@ export function PollPage({ id }: { id: string }) {
     return made;
   });
   const [tab, setTab] = useState<Tab | null>(null);
+  /** Someone who hasn't answered yet asked to see everyone's answers first. */
+  const [peek, setPeek] = useState(false);
   const [tool, setTool] = useState<Mark>(2);
   const [draft, setDraft] = useState<Marks | null>(null);
   /** Times marked before saying who you are; they go along with the join. */
@@ -424,7 +426,9 @@ export function PollPage({ id }: { id: string }) {
           ))}
         </div>
 
-        <div className="panels" data-tab={activeTab}>
+        {/* Until you've saved your own answer, a wide screen shows only your grid, so nobody tries to mark
+            everyone's (which only shows). */}
+        <div className="panels" data-tab={activeTab} data-answering={(!me && !peek) || undefined}>
           <section className="panel panel-mine" id="panel-mine" role="tabpanel" aria-labelledby="tab-mine">
             <h2 className="panel-heading">Your times</h2>
             {me ? (
@@ -567,6 +571,20 @@ export function PollPage({ id }: { id: string }) {
             )}
           </section>
 
+          {!me && !peek && (
+            <aside className="panel panel-peek">
+              <p>
+                Everyone’s answers and the best nights show up here once you’ve saved yours
+                {answeredCount > 0 ? `. ${plural(answeredCount, 'person has', 'people have')} answered so far.` : '.'}
+              </p>
+              {answeredCount > 0 && (
+                <button type="button" className="text-button" onClick={() => setPeek(true)}>
+                  show them now
+                </button>
+              )}
+            </aside>
+          )}
+
           <section className="panel panel-group" id="panel-group" role="tabpanel" aria-labelledby="tab-group">
             <h2 className="panel-heading">Everyone</h2>
             {counted.length === 0 ? (
@@ -575,6 +593,10 @@ export function PollPage({ id }: { id: string }) {
               </p>
             ) : (
               <>
+              <p className="hint group-hint">
+                Everyone’s answers together, to look at rather than mark. The brighter a window, the more people are
+                free. Tap one to see who.
+              </p>
               <div className="legend" aria-hidden="true">
                 <span>none free</span>
                 <span className="legend-ramp" style={{ background: GLOW_GRADIENT }} />
