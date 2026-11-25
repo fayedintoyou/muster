@@ -4,6 +4,7 @@ import { LIMITS } from '../core/validate';
 import { ApiError, api } from './api';
 import { store } from './store';
 import { ClassPicker } from './ClassPicker';
+import { RoleIcon } from './icons';
 
 // Who's answering, after they've marked their times: a name or in-game handle, the roles they'd bring
 // and, if they like, a class and spec. Saving sends the times along with it.
@@ -154,10 +155,11 @@ export function JoinForm({
               <button
                 type="button"
                 key={role}
-                className="chip"
+                className="chip icon-chip"
                 aria-pressed={roles.includes(role)}
                 onClick={() => setRoles((list) => (list.includes(role) ? list.filter((r) => r !== role) : [...list, role]))}
               >
+                <RoleIcon role={role} />
                 {role}
               </button>
             ))}

@@ -17,6 +17,7 @@ import { PollForm } from './PollForm';
 import { ZonePicker } from './ZonePicker';
 import { ClassPicker } from './ClassPicker';
 import { Composition } from './Composition';
+import { RoleIcon } from './icons';
 import { useCopied } from './copy';
 import { GLOW_GRADIENT } from './glow';
 import { type Membership, detectedZone, store } from './store';
@@ -469,12 +470,13 @@ export function PollPage({ id }: { id: string }) {
                         <button
                           type="button"
                           key={role}
-                          className="chip small"
+                          className="chip small icon-chip"
                           aria-pressed={me.roles.includes(role)}
                           onClick={() =>
                             void saveRoles(me.roles.includes(role) ? me.roles.filter((r) => r !== role) : [...me.roles, role])
                           }
                         >
+                          <RoleIcon role={role} />
                           {role}
                         </button>
                       ))}

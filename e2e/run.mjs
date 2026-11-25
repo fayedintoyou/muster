@@ -111,6 +111,11 @@ try {
   const times = p1.locator('.poll-form .time-row select');
   await times.nth(0).selectOption(String(20 * 60));
   await times.nth(1).selectOption('60');
+  // Roles and classes are buttons to switch on and off, not lists to type.
+  assert.deepEqual(await p1.locator('.poll-form [aria-label="Roles to ask about"] .chip').allInnerTexts(), ['tank', 'healer', 'dps']);
+  assert.equal(await p1.locator('.poll-form [aria-label="Classes to offer"] .chip[aria-pressed="true"]').count(), 9, 'all nine classes start on');
+  assert.equal(await p1.locator('.poll-form [aria-label="Classes to offer"] .chip .class-icon').count(), 9, 'each class has its icon');
+  await p1.click('.poll-form .class-chip:text-is("druid")');
   await p1.click('button:text("make the poll")');
   await p1.waitForURL(/\/e\/[a-z0-9]{8}$/);
   const pollUrl = p1.url();
@@ -141,6 +146,7 @@ try {
   await p1.fill('#join-name', 'Faye');
   await p1.click('.join .chip:text("tank")');
   // Classes come as buttons in WoW's class colours; picking one offers its specs.
+  assert.equal(await p1.locator('.join .class-picker fieldset:first-of-type .class-chip').count(), 8, 'a class switched off isn’t offered');
   await p1.click('.join .class-chip:text-is("paladin")');
   assert.deepEqual(await p1.locator('.join .class-picker fieldset:nth-of-type(2) .class-chip').allInnerTexts(), ['holy', 'protection', 'retribution'], 'a paladin picks from paladin specs');
   await p1.click('.join .class-chip:text-is("protection")');

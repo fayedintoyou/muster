@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
 import { specsFor } from '../core/classes';
+import { ClassIcon } from './icons';
 
 // WoW's class colours, which every player already reads at a glance. Shaman's blue is lifted a little so
 // it stays legible on the night background. A class the poll's maker added has none.
@@ -56,7 +57,7 @@ export function ClassPicker({
             <button
               type="button"
               key={c}
-              className="chip class-chip"
+              className="chip class-chip icon-chip"
               style={classStyle(c)}
               aria-pressed={cls === c}
               onClick={() => {
@@ -65,6 +66,7 @@ export function ClassPicker({
                 onChange(next, specsFor(next).includes(spec) || (!specsFor(next).length && next) ? spec : '');
               }}
             >
+              <ClassIcon cls={c} />
               {c}
             </button>
           ))}
