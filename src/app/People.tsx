@@ -56,7 +56,7 @@ export function People({
               </label>
               <span className="person-meta">
                 {p.roles.length > 0 && <span className="person-roles">{p.roles.join(', ')}</span>}
-                <ClassName cls={p.cls} spec={p.spec} />
+                <ClassName cls={p.cls} specs={p.specs} spec={p.spec} />
                 {marked === 0 && <span className="muted">no times yet</span>}
               </span>
               {p.note && <p className="person-note">{p.note}</p>}

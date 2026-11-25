@@ -57,6 +57,12 @@ export const store = {
   setLastClass(cls: string): void {
     write('muster:class', cls);
   },
+  lastSpecs(): string[] {
+    return read<string[]>('muster:specs', []);
+  },
+  setLastSpecs(specs: string[]): void {
+    write('muster:specs', specs);
+  },
   lastSpec(): string {
     return read<string>('muster:spec', '');
   },

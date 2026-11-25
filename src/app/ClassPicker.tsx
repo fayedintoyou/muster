@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
-import { specsFor } from '../core/classes';
+import { classLabel, specsFor } from '../core/classes';
+import { LIMITS } from '../core/validate';
 import { ClassIcon } from './icons';
 
 // WoW's class colours, which every player already reads at a glance. Shaman's blue is lifted a little so
@@ -21,37 +22,41 @@ export function classStyle(cls: string): CSSProperties | undefined {
   return colour ? ({ '--class': colour } as CSSProperties) : undefined;
 }
 
-/** "protection paladin" in the paladin's colour; or the spec alone, for people without a class. */
-export function ClassName({ cls, spec }: { cls: string; spec: string }) {
+/** "holy / protection paladin" in the paladin's colour; or the typed spec alone, from before spec buttons. */
+export function ClassName({ cls, specs, spec }: { cls: string; specs: string[]; spec: string }) {
   if (!cls) return spec ? <span className="person-spec">{spec}</span> : null;
   return (
     <span className="class-name" style={classStyle(cls)}>
-      {spec ? `${spec} ${cls}` : cls}
+      {classLabel(cls, specs)}
     </span>
   );
 }
 
-/** One class from the poll's list, then one of that class's specs (or a typed one for a class without a list). */
+/**
+ * A class from the poll's list, then one or two of its specs (typed, for a class muster has no specs for).
+ * `missing` says which of the two still needs picking, once someone has tried to save without it.
+ */
 export function ClassPicker({
   classes,
   cls,
-  spec,
+  specs,
   onChange,
   idPrefix,
+  missing,
 }: {
   classes: string[];
   cls: string;
-  spec: string;
-  onChange: (cls: string, spec: string) => void;
+  specs: string[];
+  onChange: (cls: string, specs: string[]) => void;
   idPrefix: string;
+  missing?: 'class' | 'spec' | null;
 }) {
-  const specs = specsFor(cls);
+  const known = specsFor(cls);
+  const full = specs.length >= LIMITS.specs;
   return (
     <div className="class-picker">
-      <fieldset className="field">
-        <legend>
-          Class <span className="muted">(optional)</span>
-        </legend>
+      <fieldset className="field" aria-invalid={missing === 'class' || undefined}>
+        <legend>Class</legend>
         <div className="day-chips">
           {classes.map((c) => (
             <button
@@ -60,50 +65,66 @@ export function ClassPicker({
               className="chip class-chip icon-chip"
               style={classStyle(c)}
               aria-pressed={cls === c}
-              onClick={() => {
-                const next = cls === c ? '' : c;
-                // A spec that the new class doesn't have goes with the old class.
-                onChange(next, specsFor(next).includes(spec) || (!specsFor(next).length && next) ? spec : '');
-              }}
+              // Another class starts its specs afresh.
+              onClick={() => onChange(c, c === cls ? specs : [])}
             >
               <ClassIcon cls={c} />
               {c}
             </button>
           ))}
         </div>
+        {missing === 'class' && (
+          <p className="error" role="alert" id={`${idPrefix}-class-missing`}>
+            Pick your class.
+          </p>
+        )}
       </fieldset>
-      {cls && specs.length > 0 && (
-        <fieldset className="field">
-          <legend>Spec</legend>
+      {cls && known.length > 0 && (
+        <fieldset className="field" aria-invalid={missing === 'spec' || undefined}>
+          <legend>
+            Spec <span className="muted">(one, or two if you play both)</span>
+          </legend>
           <div className="day-chips">
-            {specs.map((s) => (
-              <button
-                type="button"
-                key={s}
-                className="chip class-chip"
-                style={classStyle(cls)}
-                aria-pressed={spec === s}
-                onClick={() => onChange(cls, spec === s ? '' : s)}
-              >
-                {s}
-              </button>
-            ))}
+            {known.map((sp) => {
+              const on = specs.includes(sp);
+              return (
+                <button
+                  type="button"
+                  key={sp}
+                  className="chip class-chip"
+                  style={classStyle(cls)}
+                  aria-pressed={on}
+                  disabled={!on && full}
+                  onClick={() => onChange(cls, on ? specs.filter((x) => x !== sp) : known.filter((x) => x === sp || specs.includes(x)))}
+                >
+                  {sp}
+                </button>
+              );
+            })}
           </div>
+          {missing === 'spec' && (
+            <p className="error" role="alert" id={`${idPrefix}-spec-missing`}>
+              Pick your spec.
+            </p>
+          )}
         </fieldset>
       )}
-      {cls && specs.length === 0 && (
+      {cls && known.length === 0 && (
         <div className="field">
-          <label htmlFor={`${idPrefix}-spec`}>
-            Spec <span className="muted">(optional)</span>
-          </label>
+          <label htmlFor={`${idPrefix}-spec`}>Spec</label>
           <input
             key={cls}
             id={`${idPrefix}-spec`}
-            defaultValue={spec}
-            maxLength={40}
+            defaultValue={specs[0] ?? ''}
+            maxLength={LIMITS.spec}
             autoComplete="off"
-            onBlur={(e) => e.target.value.trim() !== spec && onChange(cls, e.target.value.trim())}
+            onBlur={(e) => onChange(cls, e.target.value.trim() ? [e.target.value.trim()] : [])}
           />
+          {missing === 'spec' && (
+            <p className="error" role="alert" id={`${idPrefix}-spec-missing`}>
+              Pick your spec.
+            </p>
+          )}
         </div>
       )}
     </div>

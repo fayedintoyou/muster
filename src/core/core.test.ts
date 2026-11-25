@@ -26,7 +26,7 @@ const weekly: PollSettings = {
 const NOW = Date.UTC(2026, 10, 25, 5, 37);
 
 function person(id: string, marks: Record<string, 1 | 2>, roles: string[] = []): Person {
-  return { id, name: id, roles, cls: '', spec: '', note: '', marks, hasPassword: false, updated: 0 };
+  return { id, name: id, roles, cls: '', specs: [], spec: '', note: '', marks, hasPassword: false, updated: 0 };
 }
 
 describe('time', () => {

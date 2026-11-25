@@ -111,8 +111,8 @@ try {
   const times = p1.locator('.poll-form .time-row select');
   await times.nth(0).selectOption(String(20 * 60));
   await times.nth(1).selectOption('60');
-  // Roles and classes are buttons to switch on and off, not lists to type.
-  assert.deepEqual(await p1.locator('.poll-form [aria-label="Roles to ask about"] .chip').allInnerTexts(), ['tank', 'healer', 'dps']);
+  // Classes are buttons to switch on and off; there's no separate question about roles.
+  assert.equal(await p1.locator('.poll-form [aria-label="Roles to ask about"]').count(), 0, 'roles aren’t asked separately');
   assert.equal(await p1.locator('.poll-form [aria-label="Classes to offer"] .chip[aria-pressed="true"]').count(), 9, 'all nine classes start on');
   assert.equal(await p1.locator('.poll-form [aria-label="Classes to offer"] .chip .class-icon').count(), 9, 'each class has its icon');
   await p1.click('.poll-form .class-chip:text-is("druid")');
@@ -142,12 +142,21 @@ try {
   await shot(p1, '02b-marked-before-joining-phone');
 
   await p1.fill('#join-name', 'Faye');
-  await p1.click('.join .chip:text("tank")');
+  assert.equal(await p1.locator('.join legend:text("What do you play?")').count(), 0, 'no separate roles question');
+  // Class and spec are required: saving without them says which is missing, and saves nothing.
+  await p1.click('button:text("save my times")');
+  assert.match(await p1.locator('#join-class-missing').innerText(), /Pick your class/);
   // Classes come as buttons in WoW's class colours; picking one offers its specs.
   assert.equal(await p1.locator('.join .class-picker fieldset:first-of-type .class-chip').count(), 8, 'a class switched off isn’t offered');
   await p1.click('.join .class-chip:text-is("paladin")');
   assert.deepEqual(await p1.locator('.join .class-picker fieldset:nth-of-type(2) .class-chip').allInnerTexts(), ['holy', 'protection', 'retribution'], 'a paladin picks from paladin specs');
+  await p1.click('button:text("save my times")');
+  assert.match(await p1.locator('#join-spec-missing').innerText(), /Pick your spec/);
+  assert.equal(await p1.locator('.me-line').count(), 0, 'nothing saved without a spec');
+  // Up to two specs: once two are picked, the third waits.
   await p1.click('.join .class-chip:text-is("protection")');
+  await p1.click('.join .class-chip:text-is("retribution")');
+  assert.equal(await p1.locator('.join .class-chip:text-is("holy")').isDisabled(), true, 'at most two specs');
   await p1.fill('#join-note', 'Fridays I might be late');
   await p1.click('button:text("save my times")');
   await p1.waitForSelector('.me-line');
@@ -161,11 +170,12 @@ try {
   );
   assert.equal(await p1.locator('.how.first').count(), 0, 'the first-time hint goes once times are marked');
   assert.ok(await p1.locator('.next-step').isVisible(), 'the next step shows once times are marked');
-  assert.deepEqual(await p1.locator('.my-class .class-chip[aria-pressed="true"]').allInnerTexts(), ['paladin', 'protection'], 'the class and spec were saved');
+  assert.deepEqual(await p1.locator('.my-class .class-chip[aria-pressed="true"]').allInnerTexts(), ['paladin', 'protection', 'retribution'], 'the class and both specs were saved');
   await shot(p1, '03-painted-phone');
   await p1.click('.next-step button:text("see who else is free")');
   assert.equal(await p1.locator('#tab-group').getAttribute('aria-selected'), 'true', 'the next step opens everyone');
-  assert.equal(await p1.locator('.people-list .class-name').innerText(), 'protection paladin', 'everyone sees the class and spec');
+  assert.equal(await p1.locator('.people-list .class-name').innerText(), 'protection / retribution paladin', 'everyone sees the class and specs');
+  assert.equal(await p1.locator('.people-list .person-roles').innerText(), 'tank, dps', 'the roles come from the specs');
   assert.equal(await p1.locator('.person-note').innerText(), 'Fridays I might be late', 'everyone sees the note');
   await p1.click('#tab-mine');
   // The note can be changed after joining; it saves when the field loses focus.
@@ -228,18 +238,17 @@ try {
   await p2.click('.join .class-chip:text-is("priest")');
   await p2.click('.join .class-chip:text-is("holy")');
   assert.equal(await p2.locator('#join-name-missing').count(), 0, 'typing a name clears the message');
-  await p2.click('.join .chip:text("healer")');
   await p2.click('button:text("save my times")');
   await p2.waitForSelector('.me-line');
   const bo = { ...(await marks(p2, 'w2')), ...(await marks(p2, 'w3')), ...(await marks(p2, 'w4')) };
   assert.equal(Object.keys(bo).length, 18, 'mouse drag filled a 3×6 rectangle');
 
   // ---- Two more people, straight through the API ----
-  const join = async (name, roles, keys, mark = 2, cls = '') => {
+  const join = async (name, cls, specs, keys, mark = 2) => {
     const r = await fetch(`${BASE}/api/polls/${pollId}/people`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name, roles, cls }),
+      body: JSON.stringify({ name, cls, specs }),
     }).then((x) => x.json());
     await fetch(`${BASE}/api/polls/${pollId}/people/${r.person.id}`, {
       method: 'PUT',
@@ -252,8 +261,21 @@ try {
     for (let m = from; m < to; m += 30) out.push(`${day}/${m}`);
     return out;
   };
-  await join('Cy', ['dps'], [...span('w3', 1230, 1440), ...span('w4', 1200, 1500)], 2, 'mage');
-  await join('Dee', ['dps', 'healer'], [...span('w4', 1200, 1440), ...span('w2', 1290, 1500)], 2, 'priest');
+  await join('Cy', 'mage', ['frost'], [...span('w3', 1230, 1440), ...span('w4', 1200, 1500)]);
+  await join('Dee', 'priest', ['holy', 'shadow'], [...span('w4', 1200, 1440), ...span('w2', 1290, 1500)]);
+  // The server holds the same rules: no class, no answer.
+  const noClass = await fetch(`${BASE}/api/polls/${pollId}/people`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name: 'Eve' }),
+  });
+  assert.equal(noClass.status, 400, 'joining a poll with classes needs a class');
+  const threeSpecs = await fetch(`${BASE}/api/polls/${pollId}/people`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name: 'Eve', cls: 'priest', specs: ['holy', 'shadow', 'discipline'] }),
+  });
+  assert.equal(threeSpecs.status, 400, 'and at most two specs');
 
   await p2.reload();
   await p2.waitForSelector('.heat .cell');
@@ -276,6 +298,7 @@ try {
   const top = await p1.locator('.best-item').first().innerText();
   assert.match(top, /Thursday/, `best window is Thursday (got ${top})`);
   assert.equal(await p1.locator('.best-item').first().locator('.best-classes').innerText(), '2 priests, 1 mage', 'a best window shows the classes of who can come');
+  assert.match(await p1.locator('.best-item').first().locator('.roles-count').innerText(), /0\s*tank\s+2\s*healer\s+2\s*dps/, 'and its roles, counted from specs');
   await shot(p1, '06-best-phone');
   await p1.locator('.best-item').first().locator('button:text("copy for discord")').click();
   await p1.waitForSelector('.best-item button:text("copied")');

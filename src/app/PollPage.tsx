@@ -51,6 +51,8 @@ export function PollPage({ id }: { id: string }) {
   const [tab, setTab] = useState<Tab | null>(null);
   /** Someone who hasn't answered yet asked to see everyone's answers first. */
   const [peek, setPeek] = useState(false);
+  // A class just switched to, waiting for its spec before it can save (a class needs one).
+  const [classDraft, setClassDraft] = useState<{ cls: string; specs: string[] } | null>(null);
   const [tool, setTool] = useState<Mark>(2);
   const [draft, setDraft] = useState<Marks | null>(null);
   /** Times marked before saying who you are; they go along with the join. */
@@ -309,13 +311,18 @@ export function PollPage({ id }: { id: string }) {
     }
   };
 
-  const saveDetail = async (details: { cls?: string; spec?: string; note?: string }) => {
-    if (!me || Object.entries(details).every(([k, v]) => v.trim() === me[k as 'cls' | 'spec' | 'note'])) return;
+  const saveDetail = async (details: { cls?: string; specs?: string[]; spec?: string; note?: string }) => {
+    if (!me) return;
+    if (details.note !== undefined && details.cls === undefined && details.note.trim() === me.note) return;
+    if (details.spec !== undefined && details.spec.trim() === me.spec) return;
     try {
       const { person } = await api.save(id, me.id, { token: membership.token }, details);
       mine.current = { id: person.id, updated: person.updated };
       if (details.spec !== undefined) store.setLastSpec(person.spec);
-      if (person.cls) store.setLastClass(person.cls);
+      if (person.cls) {
+        store.setLastClass(person.cls);
+        store.setLastSpecs(person.specs);
+      }
       setState((prev) => prev && { ...prev, people: prev.people.map((p) => (p.id === person.id ? { ...person, marks: p.marks } : p)) });
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : String(err));
@@ -467,7 +474,7 @@ export function PollPage({ id }: { id: string }) {
                   </p>
                 )}
                 <div className="mine-footer">
-                  {poll.roles.length > 0 && (
+                  {poll.classes.length === 0 && poll.roles.length > 0 && (
                     <div className="my-roles">
                       <span className="muted">You play</span>
                       {poll.roles.map((role) => (
@@ -494,12 +501,21 @@ export function PollPage({ id }: { id: string }) {
                 </div>
                 {poll.classes.length > 0 ? (
                   <div className="my-class">
+                    {!me.cls && !classDraft && <p className="hint">Add your class and spec, so the organizer can count them.</p>}
                     <ClassPicker
                       classes={poll.classes}
-                      cls={me.cls}
-                      spec={me.spec}
+                      cls={classDraft?.cls ?? me.cls}
+                      specs={classDraft?.specs ?? me.specs}
                       idPrefix="mine"
-                      onChange={(cls, spec) => void saveDetail({ cls, spec })}
+                      missing={classDraft ? 'spec' : null}
+                      onChange={(cls, specs) => {
+                        if (specs.length === 0) {
+                          setClassDraft({ cls, specs });
+                          return;
+                        }
+                        setClassDraft(null);
+                        void saveDetail({ cls, specs });
+                      }}
                     />
                   </div>
                 ) : (

@@ -2,12 +2,12 @@ import { type FormEvent, useMemo, useState } from 'react';
 import type { Mode, PollSettings, SlotSize } from '../core/types';
 import { SLOT_SIZES, validateSettings } from '../core/validate';
 import { WEEK_ORDER, slotKeys } from '../core/slots';
-import { WOW_CLASSES } from '../core/classes';
+import { ROLES, WOW_CLASSES } from '../core/classes';
 import { formatDuration, formatMinute, weekdayName } from '../core/format';
 import { today, windowLength } from '../core/time';
 import { DatePicker } from './DatePicker';
 import { classStyle } from './ClassPicker';
-import { ClassIcon, RoleIcon } from './icons';
+import { ClassIcon } from './icons';
 import { ZonePicker } from './ZonePicker';
 import { detectedZone } from './store';
 
@@ -56,12 +56,8 @@ export function PollForm({
   const [end, setEnd] = useState(initial.end);
   const [slot, setSlot] = useState<SlotSize>(initial.slot);
   const [tz, setTz] = useState(initial.tz);
-  const [rolesOn, setRolesOn] = useState(initial.roles.length > 0);
-  const [roles, setRoles] = useState(initial.roles.length ? initial.roles : DEFAULT_SETTINGS.roles);
-  const [classesOn, setClassesOn] = useState(initial.classes.length > 0);
   const [classes, setClasses] = useState(initial.classes.length ? initial.classes : DEFAULT_SETTINGS.classes);
   // The usual choices, plus any a poll already had that aren't among them.
-  const roleOptions = useMemo(() => [...new Set([...DEFAULT_SETTINGS.roles, ...initial.roles])], [initial.roles]);
   const classOptions = useMemo(() => [...new Set([...DEFAULT_SETTINGS.classes, ...initial.classes])], [initial.classes]);
   const [length, setLength] = useState(initial.length);
   const [error, setError] = useState('');
@@ -76,8 +72,9 @@ export function PollForm({
     end,
     slot,
     tz,
-    roles: rolesOn ? roleOptions.filter((r) => roles.includes(r)) : [],
-    classes: classesOn ? classOptions.filter((c) => classes.includes(c)) : [],
+    // Tank, healer and dps are counted from everyone's specs.
+    roles: [...ROLES],
+    classes: classOptions.filter((c) => classes.includes(c)),
     length,
   };
 
@@ -93,6 +90,10 @@ export function PollForm({
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    if (settings.classes.length === 0) {
+      setError('Pick at least one class.');
+      return;
+    }
     const checked = validateSettings(settings);
     if (!checked.ok) {
       setError(checked.error);
@@ -220,55 +221,25 @@ export function PollForm({
       </fieldset>
 
       <fieldset className="field">
-        <legend>Roles</legend>
-        <label className="check">
-          <input type="checkbox" checked={rolesOn} onChange={(e) => setRolesOn(e.target.checked)} />
-          <span>Ask what everyone plays, and count each role in best times</span>
-        </label>
-        {rolesOn && (
-          <div className="day-chips" role="group" aria-label="Roles to ask about">
-            {roleOptions.map((r) => (
-              <button
-                type="button"
-                key={r}
-                className="chip icon-chip"
-                aria-pressed={roles.includes(r)}
-                onClick={() => setRoles((list) => toggle(list, r))}
-              >
-                <RoleIcon role={r} />
-                {r}
-              </button>
-            ))}
-          </div>
-        )}
-      </fieldset>
-
-      <fieldset className="field">
         <legend>Classes</legend>
-        <label className="check">
-          <input type="checkbox" checked={classesOn} onChange={(e) => setClassesOn(e.target.checked)} />
-          <span>Ask which class and spec everyone plays, and count them</span>
-        </label>
-        {classesOn && (
-          <>
-            <div className="day-chips" role="group" aria-label="Classes to offer">
-              {classOptions.map((c) => (
-                <button
-                  type="button"
-                  key={c}
-                  className="chip class-chip icon-chip"
-                  style={classStyle(c)}
-                  aria-pressed={classes.includes(c)}
-                  onClick={() => setClasses((list) => toggle(list, c))}
-                >
-                  <ClassIcon cls={c} />
-                  {c}
-                </button>
-              ))}
-            </div>
-            <p className="hint">Everyone picks their class from these, then its spec.</p>
-          </>
-        )}
+        <div className="day-chips" role="group" aria-label="Classes to offer">
+          {classOptions.map((c) => (
+            <button
+              type="button"
+              key={c}
+              className="chip class-chip icon-chip"
+              style={classStyle(c)}
+              aria-pressed={classes.includes(c)}
+              onClick={() => setClasses((list) => toggle(list, c))}
+            >
+              <ClassIcon cls={c} />
+              {c}
+            </button>
+          ))}
+        </div>
+        <p className="hint">
+          Everyone picks their class from these, and a spec or two. Tanks, healers and dps are counted from the specs.
+        </p>
       </fieldset>
 
       <details className="field more" open={editing || undefined}>
