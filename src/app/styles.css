@@ -615,6 +615,11 @@ option { background: var(--wall); color: var(--ink); }
 .join { margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--line); }
 .person-spec { color: var(--ink); opacity: 0.75; }
 
+/* Role and class icons: line drawings in the chip's own colour. */
+.icon-chip { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; }
+.icon { width: 0.95rem; height: 0.95rem; flex: none; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.chip.small .icon { width: 0.85rem; height: 0.85rem; }
+
 /* Classes, in WoW's class colours: text in the colour, and a chip lit with it once picked. */
 .class-name { color: var(--class, var(--ink)); }
 .class-chip { color: var(--class, var(--muted)); border-color: color-mix(in srgb, var(--class, var(--ink)) 40%, transparent); }

@@ -6,6 +6,8 @@ import { WOW_CLASSES } from '../core/classes';
 import { formatDuration, formatMinute, weekdayName } from '../core/format';
 import { today, windowLength } from '../core/time';
 import { DatePicker } from './DatePicker';
+import { classStyle } from './ClassPicker';
+import { ClassIcon, RoleIcon } from './icons';
 import { ZonePicker } from './ZonePicker';
 import { detectedZone } from './store';
 
@@ -24,6 +26,9 @@ export const DEFAULT_SETTINGS: PollSettings = {
 };
 
 const LENGTHS = Array.from({ length: 16 }, (_, i) => (i + 1) * 30);
+
+const toggle = (list: string[], item: string) =>
+  list.includes(item) ? list.filter((x) => x !== item) : [...list, item];
 
 export function PollForm({
   initial,
@@ -52,11 +57,12 @@ export function PollForm({
   const [slot, setSlot] = useState<SlotSize>(initial.slot);
   const [tz, setTz] = useState(initial.tz);
   const [rolesOn, setRolesOn] = useState(initial.roles.length > 0);
-  const [rolesText, setRolesText] = useState((initial.roles.length ? initial.roles : DEFAULT_SETTINGS.roles).join(', '));
+  const [roles, setRoles] = useState(initial.roles.length ? initial.roles : DEFAULT_SETTINGS.roles);
   const [classesOn, setClassesOn] = useState(initial.classes.length > 0);
-  const [classesText, setClassesText] = useState(
-    (initial.classes.length ? initial.classes : DEFAULT_SETTINGS.classes).join(', '),
-  );
+  const [classes, setClasses] = useState(initial.classes.length ? initial.classes : DEFAULT_SETTINGS.classes);
+  // The usual choices, plus any a poll already had that aren't among them.
+  const roleOptions = useMemo(() => [...new Set([...DEFAULT_SETTINGS.roles, ...initial.roles])], [initial.roles]);
+  const classOptions = useMemo(() => [...new Set([...DEFAULT_SETTINGS.classes, ...initial.classes])], [initial.classes]);
   const [length, setLength] = useState(initial.length);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -70,8 +76,8 @@ export function PollForm({
     end,
     slot,
     tz,
-    roles: rolesOn ? rolesText.split(',').map((r) => r.trim()).filter(Boolean) : [],
-    classes: classesOn ? classesText.split(',').map((c) => c.trim()).filter(Boolean) : [],
+    roles: rolesOn ? roleOptions.filter((r) => roles.includes(r)) : [],
+    classes: classesOn ? classOptions.filter((c) => classes.includes(c)) : [],
     length,
   };
 
@@ -220,13 +226,20 @@ export function PollForm({
           <span>Ask what everyone plays, and count each role in best times</span>
         </label>
         {rolesOn && (
-          <input
-            aria-label="Roles, separated by commas"
-            value={rolesText}
-            onChange={(e) => setRolesText(e.target.value)}
-            placeholder="tank, healer, dps"
-            autoComplete="off"
-          />
+          <div className="day-chips" role="group" aria-label="Roles to ask about">
+            {roleOptions.map((r) => (
+              <button
+                type="button"
+                key={r}
+                className="chip icon-chip"
+                aria-pressed={roles.includes(r)}
+                onClick={() => setRoles((list) => toggle(list, r))}
+              >
+                <RoleIcon role={r} />
+                {r}
+              </button>
+            ))}
+          </div>
         )}
       </fieldset>
 
@@ -238,13 +251,22 @@ export function PollForm({
         </label>
         {classesOn && (
           <>
-            <input
-              aria-label="Classes, separated by commas"
-              value={classesText}
-              onChange={(e) => setClassesText(e.target.value)}
-              autoComplete="off"
-            />
-            <p className="hint">WoW Forever’s nine. The specs for each come with them.</p>
+            <div className="day-chips" role="group" aria-label="Classes to offer">
+              {classOptions.map((c) => (
+                <button
+                  type="button"
+                  key={c}
+                  className="chip class-chip icon-chip"
+                  style={classStyle(c)}
+                  aria-pressed={classes.includes(c)}
+                  onClick={() => setClasses((list) => toggle(list, c))}
+                >
+                  <ClassIcon cls={c} />
+                  {c}
+                </button>
+              ))}
+            </div>
+            <p className="hint">Everyone picks their class from these, then its spec.</p>
           </>
         )}
       </fieldset>
