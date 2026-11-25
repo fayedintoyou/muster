@@ -11,44 +11,49 @@ and 5 GB of Durable Object storage. Pages refresh every 15 seconds while someone
 once they've been idle five minutes, and not at all in a background tab), so a guild of 30 stays far
 inside that.
 
-## First deploy: pick one
+## How it deploys
 
-### From the Cloudflare dashboard (works from a phone)
+Every push to `main` runs the tests (unit, typecheck and the Chrome e2e run), then `npm run deploy`
+(`.github/workflows/deploy.yml`). Pushes to other branches and pull requests run the tests only. There
+are no preview deploys: a Worker preview would share the live polls' Durable Objects.
 
-1. Cloudflare → **Workers & Pages** → **Create** → **Import a repository**.
-2. Pick `fayedintoyou/muster`. If Cloudflare asks, let its GitHub app (“Cloudflare Workers and Pages”)
-   see that repository.
-3. Keep the project name **muster** (it must match `name` in `wrangler.jsonc`). Set the build command to
-   `npm run build`; leave the deploy command as `npx wrangler deploy`.
-4. **Deploy.** The first build takes a minute or two; then https://muster.fayelore.com is live.
+Unlike the room and lineage, which are private and run on the Mac's self-hosted runners, muster is a
+public repository, so its jobs run on GitHub's own machines: free for public repositories, and they
+never run a stranger's pull request on the Mac. Secrets aren't given to pull requests.
 
-This also sets up deploy-on-push: every push to `main` builds and deploys. The build token Cloudflare
-creates for it can edit Workers routes on the account's zones, which is what the custom domain needs.
-Workers Builds' free allowance is 3,000 build minutes a month.
+The first deploy was by hand from the Mac on 2026-11-25. That's when the account's workers.dev subdomain,
+`fayelore.workers.dev`, was created: Cloudflare won't take a Worker with Durable Objects without one,
+even with no workers.dev route. The room and lineage are Pages projects (`*.pages.dev`), so they never
+needed one.
 
-### From the Mac
+## One-time setup
+
+The secrets are the same Cloudflare token and account ID the room and lineage use, kept in the Mac's
+login Keychain (services `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`). Despite lineage's notes
+calling it Pages-only, the token deploys this Worker too (checked 2026-11-25). Pipe them in without
+showing them:
 
 ```sh
-git clone https://github.com/fayedintoyou/muster && cd muster
+for s in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID; do
+  security find-generic-password -a "$USER" -s $s -w | tr -d '\n' | gh secret set $s -R fayedintoyou/muster
+done
+gh workflow run deploy.yml -R fayedintoyou/muster --ref main
+```
+
+Until both secrets are set, the deploy job is skipped with a warning and the tests still run.
+
+To deploy by hand from the Mac instead:
+
+```sh
 npm ci
 npx wrangler login     # once, if this Mac isn't logged in to Cloudflare
 npm run deploy         # vite build && wrangler deploy
 ```
 
-To get deploy-on-push afterwards, connect the existing Worker: **Workers & Pages** → `muster` →
-**Settings** → **Builds** → **Connect**, with the same build and deploy commands as above.
-
-### From GitHub Actions instead
-
-The room and lineage deploy from Actions on the Mac's self-hosted runners with a token limited to
-*Cloudflare Pages · Edit*. That token can't deploy a Worker. To do it the same way here you'd need a token
-with *Account · Workers Scripts · Edit* and *Zone · Workers Routes · Edit* for fayelore.com, the
-`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` secrets on this repository, and a runner registered to
-it. Workers Builds needs none of that, so it's the suggested route.
-
 ## Checking
 
 ```sh
+gh run list -R fayedintoyou/muster -w "test and deploy" -L 1
 curl -sI https://muster.fayelore.com            # 200, served by cloudflare
 curl -s https://muster.fayelore.com/e/<id> | grep og:title   # the poll's name, for Discord's preview
 npx wrangler tail muster                        # live logs

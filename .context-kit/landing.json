@@ -1,0 +1,6 @@
+{
+  "expectedChecks": [
+    { "name": "test", "app": "github-actions", "workflow": ".github/workflows/deploy.yml", "event": "pull_request" }
+  ],
+  "routine": { "paths": ["docs/**", "README.md"] }
+}
