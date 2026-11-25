@@ -74,6 +74,29 @@ export function zoneCity(tz: string): string {
   return last.replace(/_/g, ' ');
 }
 
+const US_REGION = /^(Eastern|Central|Mountain|Pacific|Alaska|Hawaii)(-Aleutian)? (Standard|Daylight) Time$/;
+
+/**
+ * What to call a zone in a sentence: "Eastern" for any zone on US Eastern time (New York, Detroit,
+ * Toronto…), likewise Central, Mountain, Pacific, Alaska and Hawaii; "Phoenix" stays "Arizona", which
+ * keeps Mountain Standard Time all year; anywhere else, its city.
+ */
+export function zonePlace(tz: string): string {
+  if (tz === 'America/Phoenix') return 'Arizona';
+  let long = '';
+  try {
+    // English names whatever the visitor's language, since that's what the pattern reads.
+    long =
+      new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'long' })
+        .formatToParts(new Date(Date.UTC(2026, 0, 15)))
+        .find((p) => p.type === 'timeZoneName')?.value ?? '';
+  } catch {
+    // An unknown zone falls through to its city.
+  }
+  const region = US_REGION.exec(long);
+  return region ? region[1] : zoneCity(tz);
+}
+
 export function plural(n: number, one: string, many = `${one}s`): string {
   return `${n} ${n === 1 ? one : many}`;
 }

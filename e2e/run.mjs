@@ -160,6 +160,22 @@ try {
   assert.equal(await p1.locator('.person-spec').innerText(), 'Prot paladin', 'everyone sees the class and spec');
   await p1.click('#tab-mine');
 
+  // US zones go by their region, and the map switches between them.
+  assert.match(await p1.locator('.poll-when').innerText(), /in Eastern time/, 'New York reads as Eastern time');
+  assert.equal(await p1.locator('.topbar .zone-current').innerText(), 'Eastern time');
+  assert.match(await p1.locator('.paint .row-head').first().innerText(), /^8pm/);
+  await p1.click('.topbar .zone-trigger');
+  await p1.waitForSelector('.zone-panel .zone-map');
+  assert.equal(await p1.locator('.zone-region[aria-pressed="true"]').getAttribute('aria-label').then((l) => l.split(' ')[0]), 'Eastern', 'the map shows Eastern as chosen');
+  await shot(p1, '03b-zone-map-phone', false);
+  await p1.click('.zone-region[aria-label^="Pacific"]');
+  assert.equal(await p1.locator('.zone-panel').count(), 0, 'choosing a zone closes the map');
+  assert.equal(await p1.locator('.topbar .zone-current').innerText(), 'Pacific time');
+  assert.match(await p1.locator('.paint .row-head').first().innerText(), /^5pm/, 'Pacific shows the 8pm Eastern start as 5pm');
+  await p1.click('.topbar .zone-trigger');
+  await p1.click('.zone-region[aria-label^="Eastern"]');
+  assert.match(await p1.locator('.paint .row-head').first().innerText(), /^8pm/, 'and back to Eastern');
+
   // ---- A desktop in Berlin, 24-hour clock ----
   const desk = await browser.newContext({
     viewport: { width: 1366, height: 900 },
@@ -172,6 +188,7 @@ try {
   await p2.waitForSelector('.paint .cell');
   const rowLabel = await p2.locator('.paint .row-head').first().innerText();
   assert.match(rowLabel, /^02:00/, `Berlin sees the 8pm ET start as 02:00 (got ${rowLabel})`);
+  assert.match(await p2.locator('.topbar .zone-current').innerText(), /^Berlin/, 'zones outside the US keep their city');
   const from = await centre(p2, '.paint .cell[data-key="w2/1260"]');
   const to = await box(p2, '.paint .cell[data-key="w4/1410"]');
   await p2.mouse.move(from.x, from.y);
