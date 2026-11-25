@@ -1,0 +1,329 @@
+// End-to-end run in real Chrome against `wrangler dev` (started here on a fresh store unless BASE is set):
+// a phone in New York makes a poll and paints with touch, a desktop in Berlin answers with a mouse, two
+// more people answer through the API, then the group view, best times and Discord copy are checked.
+// Screenshots land in e2e/shots/. Needs a built UI (npm run build) and Chrome (CHROME=/path/to/chrome).
+
+import { spawn } from 'node:child_process';
+import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import assert from 'node:assert/strict';
+import { chromium } from 'playwright-core';
+
+const CHROME =
+  process.env.CHROME ??
+  (process.platform === 'darwin'
+    ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+    : '/usr/bin/google-chrome');
+const SHOTS = new URL('./shots/', import.meta.url).pathname;
+mkdirSync(SHOTS, { recursive: true });
+
+let BASE = process.env.BASE;
+let server;
+let store;
+if (!BASE) {
+  store = mkdtempSync(join(tmpdir(), 'muster-e2e-'));
+  const port = 8790 + Math.floor(Math.random() * 200);
+  BASE = `http://127.0.0.1:${port}`;
+  server = spawn('npx', ['wrangler', 'dev', '--port', String(port), '--ip', '127.0.0.1', '--persist-to', store], {
+    env: { ...process.env, WRANGLER_SEND_METRICS: 'false' },
+    stdio: ['ignore', 'pipe', 'pipe'],
+    // Its own process group, so stopping it stops wrangler and workerd under npx too.
+    detached: true,
+  });
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('wrangler dev did not start')), 60_000);
+    const onData = (d) => {
+      if (String(d).includes('Ready on')) {
+        clearTimeout(timer);
+        resolve();
+      }
+    };
+    server.stdout.on('data', onData);
+    server.stderr.on('data', onData);
+  });
+}
+
+const errors = [];
+const watch = (page, who) => {
+  page.on('console', (m) => m.type() === 'error' && errors.push(`${who}: ${m.text()}`));
+  page.on('pageerror', (e) => errors.push(`${who}: ${e.message}`));
+};
+const shot = (page, name, fullPage = true) => page.screenshot({ path: `${SHOTS}${name}.png`, fullPage });
+
+async function touch(client, type, point) {
+  await client.send('Input.dispatchTouchEvent', { type, touchPoints: point ? [point] : [] });
+}
+// Centre the element first: near the window's edges a held drag scrolls the page by design.
+async function centre(page, selector) {
+  const el = page.locator(selector);
+  await el.evaluate((e) => e.scrollIntoView({ block: 'center', inline: 'center' }));
+  const box = await el.boundingBox();
+  return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+}
+async function box(page, selector) {
+  const b = await page.locator(selector).boundingBox();
+  return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+}
+async function touchDrag(page, client, from, to) {
+  await page.locator(from).evaluate((e) => e.scrollIntoView({ block: 'center', inline: 'center' }));
+  const a = await box(page, from);
+  const b = await box(page, to);
+  await touch(client, 'touchStart', a);
+  for (let i = 1; i <= 10; i++) {
+    const t = i / 10;
+    await touch(client, 'touchMove', { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+  }
+  await touch(client, 'touchEnd');
+}
+async function tap(page, client, selector) {
+  const p = await centre(page, selector);
+  await touch(client, 'touchStart', p);
+  await touch(client, 'touchEnd');
+}
+const marks = (page, prefix) =>
+  page.$$eval(`.paint .cell[data-key^="${prefix}"]`, (els) =>
+    Object.fromEntries(els.filter((e) => e.dataset.mark !== '0').map((e) => [e.dataset.key, Number(e.dataset.mark)])),
+  );
+
+const browser = await chromium.launch({ executablePath: CHROME, headless: true, args: ['--no-sandbox'] });
+try {
+  // ---- A phone in New York makes the poll ----
+  const phone = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+    timezoneId: 'America/New_York',
+    locale: 'en-US',
+  });
+  await phone.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: BASE });
+  const p1 = await phone.newPage();
+  watch(p1, 'phone');
+  await p1.goto(`${BASE}/`);
+  await p1.waitForSelector('.pane-cell');
+  await p1.waitForTimeout(2500);
+  await shot(p1, '01-home-phone');
+
+  await p1.fill('#poll-title', 'Raid nights');
+  for (const d of ['Mon', 'Fri', 'Sat', 'Sun']) await p1.click(`.day-chips button:text-is("${d}")`);
+  const times = p1.locator('.poll-form .time-row select');
+  await times.nth(0).selectOption(String(20 * 60));
+  await times.nth(1).selectOption('60');
+  await p1.click('button:text("make the poll")');
+  await p1.waitForURL(/\/e\/[a-z0-9]{8}$/);
+  const pollUrl = p1.url();
+  const pollId = pollUrl.split('/').pop();
+  await p1.waitForSelector('.share-panel');
+  await shot(p1, '02-made-phone');
+
+  await p1.fill('#join-name', 'Faye');
+  await p1.click('.join .chip:text("tank")');
+  await p1.click('button:text("start marking times")');
+  await p1.waitForSelector('.paint .cell');
+
+  const cdp = await phone.newCDPSession(p1);
+  // Drag Tue 8pm → Wed 10:30pm: two nights, six half hours each.
+  await touchDrag(p1, cdp, '.paint .cell[data-key="w2/1200"]', '.paint .cell[data-key="w3/1350"]');
+  // Then Thu 9pm and 9:30pm as "if needed", by tapping.
+  await p1.click('.tool button:text("if needed")');
+  await tap(p1, cdp, '.paint .cell[data-key="w4/1260"]');
+  await tap(p1, cdp, '.paint .cell[data-key="w4/1290"]');
+  await p1.waitForSelector('.save-state.saved');
+  const mine = { ...(await marks(p1, 'w2')), ...(await marks(p1, 'w3')), ...(await marks(p1, 'w4')) };
+  assert.equal(Object.values(mine).filter((m) => m === 2).length, 12, 'touch drag filled a 2×6 rectangle');
+  assert.deepEqual(
+    Object.entries(mine).filter(([, m]) => m === 1).map(([k]) => k).sort(),
+    ['w4/1260', 'w4/1290'],
+    'taps marked "if needed"',
+  );
+  // Starting a drag on an "if needed" slot with that tool clears.
+  await tap(p1, cdp, '.paint .cell[data-key="w4/1290"]');
+  await p1.waitForSelector('.save-state.saved');
+  assert.equal((await marks(p1, 'w4'))['w4/1290'], undefined, 'tap on a marked slot clears it');
+  await p1.click('.tool button:text("available")');
+  await shot(p1, '03-painted-phone');
+
+  // ---- A desktop in Berlin, 24-hour clock ----
+  const desk = await browser.newContext({
+    viewport: { width: 1366, height: 900 },
+    timezoneId: 'Europe/Berlin',
+    locale: 'en-GB',
+  });
+  const p2 = await desk.newPage();
+  watch(p2, 'desk');
+  await p2.goto(pollUrl);
+  await p2.fill('#join-name', 'Bo');
+  await p2.click('.join .chip:text("healer")');
+  await p2.click('button:text("start marking times")');
+  await p2.waitForSelector('.paint .cell');
+  const rowLabel = await p2.locator('.paint .row-head').first().innerText();
+  assert.match(rowLabel, /^02:00/, `Berlin sees the 8pm ET start as 02:00 (got ${rowLabel})`);
+  const from = await centre(p2, '.paint .cell[data-key="w2/1260"]');
+  const to = await box(p2, '.paint .cell[data-key="w4/1410"]');
+  await p2.mouse.move(from.x, from.y);
+  await p2.mouse.down();
+  await p2.mouse.move(to.x, to.y, { steps: 12 });
+  await p2.mouse.up();
+  await p2.waitForSelector('.save-state.saved');
+  const bo = { ...(await marks(p2, 'w2')), ...(await marks(p2, 'w3')), ...(await marks(p2, 'w4')) };
+  assert.equal(Object.keys(bo).length, 18, 'mouse drag filled a 3×6 rectangle');
+
+  // ---- Two more people, straight through the API ----
+  const join = async (name, roles, keys, mark = 2) => {
+    const r = await fetch(`${BASE}/api/polls/${pollId}/people`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name, roles }),
+    }).then((x) => x.json());
+    await fetch(`${BASE}/api/polls/${pollId}/people/${r.person.id}`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${r.token}` },
+      body: JSON.stringify({ marks: Object.fromEntries(keys.map((k) => [k, mark])) }),
+    });
+  };
+  const span = (day, from, to) => {
+    const out = [];
+    for (let m = from; m < to; m += 30) out.push(`${day}/${m}`);
+    return out;
+  };
+  await join('Cy', ['dps'], [...span('w3', 1230, 1440), ...span('w4', 1200, 1500)]);
+  await join('Dee', ['dps', 'healer'], [...span('w4', 1200, 1440), ...span('w2', 1290, 1500)]);
+
+  await p2.reload();
+  await p2.waitForSelector('.heat .cell');
+  await p2.locator('.heat .cell[data-key="w4/1290"]').hover();
+  await p2.waitForSelector('.slot-detail-head');
+  await shot(p2, '04-desk-berlin');
+
+  // ---- Back on the phone: everyone, then best times ----
+  await p1.reload();
+  await p1.waitForSelector('.tabs');
+  await p1.click('.tabs button:text("everyone")');
+  await tap(p1, cdp, '.heat .cell[data-key="w4/1290"]');
+  const detail = await p1.locator('.slot-detail').innerText();
+  assert.match(detail, /3 of 4 free/, `slot detail counts (got ${detail})`);
+  await shot(p1, '05-everyone-phone');
+
+  await p1.click('.tabs button:text("best times")');
+  await p1.waitForSelector('.best-item');
+  const top = await p1.locator('.best-item').first().innerText();
+  assert.match(top, /Thursday/, `best window is Thursday (got ${top})`);
+  await shot(p1, '06-best-phone');
+  await p1.locator('.best-item').first().locator('button:text("copy for discord")').click();
+  await p1.waitForSelector('.best-item button:text("copied")');
+  const clip = await p1.evaluate(() => navigator.clipboard.readText());
+  assert.match(clip, /^\*\*Raid nights\*\* · <t:\d+:F> – <t:\d+:t> \(<t:\d+:R>\)$/, `discord text (got ${clip})`);
+
+  // "Must come": only windows with Cy.
+  await p1.click('.tabs button:text("everyone")');
+  await p1.locator('.people-list li', { hasText: 'Cy' }).locator('button:text("must come")').click();
+  await p1.click('.tabs button:text("best times")');
+  const withCy = await p1.locator('.best-item').allInnerTexts();
+  assert.ok(withCy.length > 0 && withCy.every((t) => !/Not free:[^.]*Cy/.test(t)), 'every window includes Cy');
+
+  await shot(p2, '07-desk-full');
+
+  // ---- The unfurl ----
+  const html = await fetch(pollUrl).then((r) => r.text());
+  assert.match(html, /<meta property="og:title" content="Raid nights"/);
+  assert.match(html, /4 people answered/);
+
+  // ---- Home on a desktop ----
+  const p3 = await desk.newPage();
+  watch(p3, 'desk-home');
+  await p3.goto(`${BASE}/`);
+  await p3.waitForTimeout(2500);
+  await shot(p3, '08-home-desk');
+
+  // ---- Seven nights in 15-minute slots on a phone: the densest common case ----
+  const dense = await fetch(`${BASE}/api/polls`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      title: 'Mythic+ pushes',
+      notes: '',
+      mode: 'weekly',
+      days: ['w1', 'w2', 'w3', 'w4', 'w5', 'w6', 'w0'],
+      start: 19 * 60,
+      end: 120,
+      slot: 15,
+      tz: 'America/Chicago',
+      roles: [],
+      length: 120,
+    }),
+  }).then((r) => r.json());
+  const p4 = await phone.newPage();
+  watch(p4, 'phone-dense');
+  await p4.goto(`${BASE}/e/${dense.id}`);
+  await p4.fill('#join-name', 'Faye');
+  await p4.click('button:text("start marking times")');
+  await p4.waitForSelector('.paint .cell');
+  const cdp4 = await phone.newCDPSession(p4);
+  await touchDrag(p4, cdp4, '.paint .cell[data-key="w1/1200"]', '.paint .cell[data-key="w5/1305"]');
+  await p4.waitForSelector('.save-state.saved');
+  const denseMarks = await p4.$$eval('.paint .cell[data-mark="2"]', (els) => els.length);
+  assert.equal(denseMarks, 5 * 8, 'dense drag filled five nights of two hours');
+  await shot(p4, '09-dense-phone');
+
+  // Holding a drag at the bottom edge scrolls the page and keeps painting.
+  await p4.evaluate(() => window.scrollTo(0, 0));
+  await p4.click('.tool button:text("if needed")');
+  const startAt = await centre(p4, '.paint .cell[data-key="w6/1140"]');
+  await p4.evaluate(() => window.scrollTo(0, 0));
+  const scrolledFrom = await p4.evaluate(() => window.scrollY);
+  const s0 = await box(p4, '.paint .cell[data-key="w6/1140"]');
+  await touch(cdp4, 'touchStart', s0);
+  const edge = { x: s0.x, y: 844 - 12 };
+  for (let i = 1; i <= 6; i++) await touch(cdp4, 'touchMove', { x: s0.x, y: s0.y + ((edge.y - s0.y) * i) / 6 });
+  await p4.waitForTimeout(900);
+  await touch(cdp4, 'touchMove', edge);
+  await touch(cdp4, 'touchEnd');
+  const scrolledTo = await p4.evaluate(() => window.scrollY);
+  assert.ok(scrolledTo > scrolledFrom + 50, `edge scrolling moved the page (${scrolledFrom} → ${scrolledTo}, start ${JSON.stringify(startAt)})`);
+  await p4.waitForSelector('.save-state.saved');
+  const satMaybe = await p4.$$eval('.paint .cell[data-key^="w6/"][data-mark="1"]', (els) => els.length);
+  const visibleRows = Math.floor((844 - 12 - s0.y) / 31);
+  assert.ok(satMaybe > visibleRows, `the drag kept painting past the first screen (${satMaybe} slots, ${visibleRows} visible)`);
+
+  // ---- Specific dates, made on a desktop with the calendar, then edited ----
+  const p5 = await desk.newPage();
+  watch(p5, 'desk-dates');
+  await p5.goto(`${BASE}/`);
+  await p5.fill('#poll-title', 'Launch week');
+  await p5.click('.segmented button:text("specific dates")');
+  await p5.click('button[aria-label="Next month"]');
+  for (const d of ['1', '2', '3', '8', '9']) await p5.click(`.calendar-day:text-is("${d}")`);
+  await shot(p5, '10-dates-form-desk');
+  await p5.click('button:text("make the poll")');
+  await p5.waitForURL(/\/e\/[a-z0-9]{8}$/);
+  await p5.waitForSelector('.share-panel');
+  const heads = await p5.locator('.paint-wrap .col-head, .join').count();
+  assert.ok(heads > 0);
+  await p5.click('.admin summary');
+  await p5.fill('.admin #poll-title', 'Launch week raids');
+  await p5.click('.admin button:text("save changes")');
+  await p5.waitForSelector('.admin button:text("saved")');
+  assert.equal(await p5.locator('h1.title').innerText(), 'Launch week raids', 'editing renames the poll');
+  await shot(p5, '11-dates-admin-desk');
+
+  console.log(`ok: ${pollUrl}`);
+} finally {
+  await browser.close();
+  if (server) {
+    try {
+      process.kill(-server.pid, 'SIGTERM');
+    } catch {
+      server.kill('SIGTERM');
+    }
+    server.stdout.destroy();
+    server.stderr.destroy();
+    server.unref();
+  }
+  if (store) rmSync(store, { recursive: true, force: true });
+}
+
+if (errors.length) {
+  console.error(`Console errors:\n${errors.join('\n')}`);
+  process.exit(1);
+}
