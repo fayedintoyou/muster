@@ -614,6 +614,18 @@ option { background: var(--wall); color: var(--ink); }
 .my-spec input { padding: 0.4rem 0.6rem; font-size: 0.9375rem; }
 .join { margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--line); }
 .person-spec { color: var(--ink); opacity: 0.75; }
+.person-note {
+  grid-area: note;
+  margin: 0.3rem 0 0 1.7rem;
+  color: #d7cfc3;
+  font-size: 0.9375rem;
+  font-style: italic;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.my-note { display: grid; gap: 0.35rem; margin-top: 0.9rem; max-width: 30rem; }
+.my-note .muted { font-size: 0.875rem; }
+.my-note textarea { min-height: 3.2rem; font-size: 0.9375rem; padding: 0.45rem 0.6rem; }
 
 .swatch { display: inline-block; width: 0.8rem; height: 0.8rem; border-radius: 2px; vertical-align: -0.05rem; flex: none; }
 .swatch.yes { background: var(--lamp); }
@@ -781,7 +793,7 @@ button.row-head:hover { color: var(--lamp); }
 .people-list li {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-areas: 'name actions' 'meta actions';
+  grid-template-areas: 'name actions' 'meta actions' 'note note';
   align-items: center;
   gap: 0 0.75rem;
   padding: 0.55rem 0;

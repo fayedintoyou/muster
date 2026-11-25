@@ -5,6 +5,7 @@ import {
   LIMITS,
   cleanMarks,
   cleanPersonRoles,
+  cleanNote,
   cleanSpec,
   nameKey,
   validateName,
@@ -26,6 +27,8 @@ interface StoredPerson {
   roles: string[];
   /** Missing on people who answered before there was a spec. */
   spec?: string;
+  /** Missing on people who answered before there were notes. */
+  note?: string;
   marks: Person['marks'];
   salt?: string;
   pass?: string;
@@ -50,6 +53,7 @@ export interface JoinInput {
   password?: unknown;
   roles?: unknown;
   spec?: unknown;
+  note?: unknown;
   /** Times marked before joining, so a new person's answers arrive in one step. */
   marks?: unknown;
   /** Sign in as an existing person of that name. */
@@ -60,6 +64,7 @@ export interface SaveInput {
   marks?: unknown;
   roles?: unknown;
   spec?: unknown;
+  note?: unknown;
   name?: unknown;
   password?: unknown;
 }
@@ -76,6 +81,7 @@ function publicPerson(p: StoredPerson): Person {
     name: p.name,
     roles: p.roles,
     spec: p.spec ?? '',
+    note: p.note ?? '',
     marks: p.marks,
     hasPassword: Boolean(p.pass),
     updated: p.updated,
@@ -191,6 +197,7 @@ export class PollObject extends DurableObject<Env> {
       key,
       roles: cleanPersonRoles(input.roles, poll.roles),
       spec: cleanSpec(input.spec),
+      note: cleanNote(input.note),
       marks: marks?.ok ? marks.value : {},
       salt: secret?.salt,
       pass: secret?.hash,
@@ -225,6 +232,7 @@ export class PollObject extends DurableObject<Env> {
     }
     if (input.roles !== undefined) person.roles = cleanPersonRoles(input.roles, poll.roles);
     if (input.spec !== undefined) person.spec = cleanSpec(input.spec);
+    if (input.note !== undefined) person.note = cleanNote(input.note);
     if (input.name !== undefined) {
       const name = validateName(input.name);
       if (!name.ok) return fail(400, name.error);

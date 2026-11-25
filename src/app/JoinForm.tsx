@@ -19,6 +19,7 @@ export function JoinForm({
   const [name, setName] = useState(() => store.lastName());
   const [roles, setRoles] = useState<string[]>(() => store.lastRoles().filter((r) => poll.roles.includes(r)));
   const [spec, setSpec] = useState(() => store.lastSpec());
+  const [note, setNote] = useState('');
   const marked = Object.keys(marks).length;
   const [nameMissing, setNameMissing] = useState(false);
   const nameField = useRef<HTMLInputElement>(null);
@@ -37,6 +38,7 @@ export function JoinForm({
         password: password || undefined,
         roles,
         spec,
+        note,
         marks,
         claim: asExisting,
       });
@@ -170,6 +172,19 @@ export function JoinForm({
           maxLength={LIMITS.spec}
           autoComplete="off"
           placeholder="Resto shaman, or a main and an alt"
+        />
+      </div>
+      <div className="field">
+        <label htmlFor="join-note">
+          A note for the organizer <span className="muted">(optional)</span>
+        </label>
+        <textarea
+          id="join-note"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          maxLength={LIMITS.note}
+          rows={2}
+          placeholder="Anything your times don’t say, like “Fridays I might be 30 minutes late”"
         />
       </div>
       {locking ? (
