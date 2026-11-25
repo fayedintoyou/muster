@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Mark, Marks, Person, PollState } from '../core/types';
 import { buildGrid } from '../core/grid';
 import { tallySlots } from '../core/best';
-import { formatRange, plural, zoneCity } from '../core/format';
+import { formatRange, plural, zonePlace } from '../core/format';
 import { MINUTE } from '../core/time';
 import { LIMITS } from '../core/validate';
 import { ApiError, api } from './api';
@@ -361,14 +361,14 @@ export function PollPage({ id }: { id: string }) {
     <div className="poll-page">
       <header className="topbar">
         <Wordmark />
-        <ZonePicker value={zone} onChange={setZone} detected={detectedZone()} label="Show times in" />
+        <ZonePicker value={zone} onChange={setZone} detected={detectedZone()} label="Show times in" align="end" />
       </header>
 
       <main className="page wide">
         <section className="poll-head">
           <h1 className="title">{poll.title}</h1>
           <p className="poll-when">
-            {when}, {nightRange} in {zoneCity(zone)} time.{' '}
+            {when}, {nightRange} in {zonePlace(zone)} time.{' '}
             <span className="muted">
               {answeredCount === 0 ? 'No answers yet.' : `${plural(answeredCount, 'person', 'people')} answered.`}
             </span>
@@ -515,7 +515,7 @@ export function PollPage({ id }: { id: string }) {
               <>
                 <h3 className="panel-title">First, when can you play?</h3>
                 <p className="first-steps">
-                  Light up every night and hour that works for you, in {zoneCity(zone)} time. Then add your name below
+                  Light up every night and hour that works for you, in {zonePlace(zone)} time. Then add your name below
                   and save.
                 </p>
                 {toolbar}
