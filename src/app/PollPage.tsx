@@ -4,6 +4,7 @@ import { buildGrid } from '../core/grid';
 import { tallySlots } from '../core/best';
 import { formatRange, plural, zoneCity } from '../core/format';
 import { MINUTE } from '../core/time';
+import { LIMITS } from '../core/validate';
 import { ApiError, api } from './api';
 import { Wordmark, navigate } from './App';
 import { BestTimes } from './BestTimes';
@@ -47,6 +48,8 @@ export function PollPage({ id }: { id: string }) {
   const [tab, setTab] = useState<Tab | null>(null);
   const [tool, setTool] = useState<Mark>(2);
   const [draft, setDraft] = useState<Marks | null>(null);
+  /** Times marked before saying who you are; they go along with the join. */
+  const [unsaved, setUnsaved] = useState<Marks>({});
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [saveError, setSaveError] = useState('');
   const [excluded, setExcluded] = useState<ReadonlySet<string>>(new Set());
@@ -201,7 +204,8 @@ export function PollPage({ id }: { id: string }) {
     saveTimer.current = window.setTimeout(() => void flush(), 500);
   };
 
-  const myMarks = draft ?? me?.marks ?? {};
+  const myMarks = me ? (draft ?? me.marks) : unsaved;
+  const nothingMarked = Object.keys(myMarks).length === 0;
 
   const people: Person[] = useMemo(
     () => (state ? state.people.map((p) => (p.id === me?.id && draft ? { ...p, marks: draft } : p)) : []),
@@ -300,6 +304,49 @@ export function PollPage({ id }: { id: string }) {
     }
   };
 
+  const saveSpec = async (spec: string) => {
+    if (!me || spec.trim() === me.spec) return;
+    try {
+      const { person } = await api.save(id, me.id, { token: membership.token }, { spec });
+      mine.current = { id: person.id, updated: person.updated };
+      store.setLastSpec(person.spec);
+      setState((prev) => prev && { ...prev, people: prev.people.map((p) => (p.id === person.id ? { ...person, marks: p.marks } : p)) });
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : String(err));
+      setSaveState('error');
+    }
+  };
+
+  const toolbar = (
+    <div className="toolbar">
+      <div className="segmented tool" role="radiogroup" aria-label="Mark slots as">
+        <button type="button" role="radio" aria-checked={tool === 2} onClick={() => setTool(2)}>
+          <span className="swatch yes" aria-hidden="true" />
+          available
+        </button>
+        <button type="button" role="radio" aria-checked={tool === 1} onClick={() => setTool(1)}>
+          <span className="swatch maybe" aria-hidden="true" />
+          if needed
+        </button>
+      </div>
+      {me && (
+        <span className={`save-state ${saveState}`} role="status">
+          {saveState === 'waiting' || saveState === 'saving' ? 'saving…' : saveState === 'saved' ? 'saved' : ''}
+        </span>
+      )}
+    </div>
+  );
+  const howTo = nothingMarked ? (
+    <p className="hint how first">
+      Press on a window and drag down to light up the hours you can play. Tap a night’s name to light the whole
+      night. Use <em>if needed</em> for hours you could do at a push.
+    </p>
+  ) : (
+    <p className="hint how">
+      Drag to light more hours; start on a lit one to clear. Tap a night or a time for the whole column or row.
+    </p>
+  );
+
   const removePerson = async (pid: string) => {
     await api.remove(id, pid, { token: pid === me?.id ? membership.token : undefined, admin: membership.admin });
     if (pid === me?.id) {
@@ -330,8 +377,8 @@ export function PollPage({ id }: { id: string }) {
           {justMade ? (
             <div className="share-panel" role="status">
               <p>
-                <strong>Your poll is ready.</strong> Send this link to the guild; it unfurls with the poll’s name in
-                Discord.
+                <strong>Your poll is ready.</strong> Mark your own times first, so the first people to open it see how
+                it works. Then send the link to the guild: pasted in Discord, it shows the poll’s name.
               </p>
               <div className="share-row">
                 <code className="share-link">{link}</code>
@@ -339,7 +386,10 @@ export function PollPage({ id }: { id: string }) {
                   {copied === 'link' ? 'copied' : 'copy link'}
                 </button>
               </div>
-              <p className="hint">This browser can edit the poll. Mark your own times below.</p>
+              <p className="hint">
+                Only this browser can change the poll. You’ll find that at the bottom of the page, under “Change this
+                poll”.
+              </p>
             </div>
           ) : (
             <button type="button" className="button small" onClick={share}>
@@ -351,7 +401,7 @@ export function PollPage({ id }: { id: string }) {
         <div className="tabs" role="tablist" aria-label="Poll views">
           {(
             [
-              ['mine', me ? 'your times' : 'add your times'],
+              ['mine', me ? 'your times' : 'mark your times'],
               ['group', `everyone (${answeredCount})`],
               ['best', 'best times'],
             ] as const
@@ -390,32 +440,9 @@ export function PollPage({ id }: { id: string }) {
                     not you?
                   </button>
                 </div>
-                <div className="toolbar">
-                  <div className="segmented tool" role="radiogroup" aria-label="Mark slots as">
-                    <button type="button" role="radio" aria-checked={tool === 2} onClick={() => setTool(2)}>
-                      <span className="swatch yes" aria-hidden="true" />
-                      available
-                    </button>
-                    <button type="button" role="radio" aria-checked={tool === 1} onClick={() => setTool(1)}>
-                      <span className="swatch maybe" aria-hidden="true" />
-                      if needed
-                    </button>
-                  </div>
-                  <span className={`save-state ${saveState}`} role="status">
-                    {saveState === 'waiting' || saveState === 'saving'
-                      ? 'saving…'
-                      : saveState === 'saved'
-                        ? 'saved'
-                        : saveState === 'error'
-                          ? ''
-                          : ''}
-                  </span>
-                </div>
-                <p className="hint how">
-                  Drag across the times you’re free. Tap a night or a time to fill the whole column or row; start on
-                  a filled slot to clear.
-                </p>
-                <PaintGrid grid={grid} marks={myMarks} tool={tool} onChange={paint} />
+                {toolbar}
+                {howTo}
+                <PaintGrid grid={grid} marks={myMarks} tool={tool} onChange={paint} demo={nothingMarked} />
                 {saveState === 'error' && (
                   <p className="error" role="alert">
                     Not saved: {saveError}{' '}
@@ -450,74 +477,122 @@ export function PollPage({ id }: { id: string }) {
                       ))}
                     </div>
                   )}
-                  {Object.keys(myMarks).length > 0 && (
+                  {!nothingMarked && (
                     <button type="button" className="text-button" onClick={() => paint({})}>
                       clear all my times
                     </button>
                   )}
                 </div>
+                <label className="my-spec">
+                  <span className="muted">Class and spec</span>
+                  <input
+                    key={me.spec}
+                    defaultValue={me.spec}
+                    maxLength={LIMITS.spec}
+                    placeholder="optional"
+                    autoComplete="off"
+                    onBlur={(e) => void saveSpec(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+                  />
+                </label>
+                {!nothingMarked && (
+                  <div className="next-step">
+                    <p>Your times save as you go, so you can close this whenever you’re done.</p>
+                    <button
+                      type="button"
+                      className="button small"
+                      onClick={() => {
+                        setTab('group');
+                        window.scrollTo(0, 0);
+                      }}
+                    >
+                      see who else is free
+                    </button>
+                  </div>
+                )}
               </>
             ) : (
-              <JoinForm
-                poll={poll}
-                onJoined={(person, token, next) => {
-                  setMembership({ ...membership, personId: person.id, token });
-                  mine.current = { id: person.id, updated: person.updated };
-                  version.current = next.version;
-                  setState(next);
-                  setTab('mine');
-                  store.remember(next.poll, Boolean(membership.admin));
-                }}
-              />
+              <>
+                <h3 className="panel-title">First, when can you play?</h3>
+                <p className="first-steps">
+                  Light up every night and hour that works for you, in {zoneCity(zone)} time. Then add your name below
+                  and save.
+                </p>
+                {toolbar}
+                {howTo}
+                <PaintGrid grid={grid} marks={unsaved} tool={tool} onChange={setUnsaved} demo={nothingMarked} />
+                <JoinForm
+                  poll={poll}
+                  marks={unsaved}
+                  onJoined={(person, token, next) => {
+                    setMembership({ ...membership, personId: person.id, token });
+                    mine.current = { id: person.id, updated: person.updated };
+                    version.current = next.version;
+                    setState(next);
+                    setUnsaved({});
+                    setSaveState('saved');
+                    setTab('mine');
+                    store.remember(next.poll, Boolean(membership.admin));
+                  }}
+                />
+              </>
             )}
           </section>
 
           <section className="panel panel-group" id="panel-group" role="tabpanel" aria-labelledby="tab-group">
             <h2 className="panel-heading">Everyone</h2>
-            <div className="legend" aria-hidden="true">
-              <span>none free</span>
-              <span className="legend-ramp" style={{ background: GLOW_GRADIENT }} />
-              <span>all {counted.length}</span>
-            </div>
-            <HeatGrid
-              grid={grid}
-              tallies={tallies}
-              total={counted.length}
-              selected={selected}
-              onSelect={setSelected}
-              onHover={setHovered}
-              outline={highlightPerson?.marks}
-            />
-            <div className="slot-detail" aria-live="polite">
-              {focusSlot && focusTally ? (
-                <>
-                  <p className="slot-detail-head">
-                    <strong>{slotLabel(grid, focusSlot, true)}</strong>{' '}
-                    <span className="muted">
-                      {focusTally.yes.length + focusTally.maybe.length} of {counted.length} free
-                    </span>
+            {counted.length === 0 ? (
+              <p className="empty">
+                No answers yet. Once people mark their times, this grid lights up wherever they overlap.
+              </p>
+            ) : (
+              <>
+              <div className="legend" aria-hidden="true">
+                <span>none free</span>
+                <span className="legend-ramp" style={{ background: GLOW_GRADIENT }} />
+                <span>all {counted.length}</span>
+              </div>
+              <HeatGrid
+                grid={grid}
+                tallies={tallies}
+                total={counted.length}
+                selected={selected}
+                onSelect={setSelected}
+                onHover={setHovered}
+                outline={highlightPerson?.marks}
+              />
+              <div className="slot-detail" aria-live="polite">
+                {focusSlot && focusTally ? (
+                  <>
+                    <p className="slot-detail-head">
+                      <strong>{slotLabel(grid, focusSlot, true)}</strong>{' '}
+                      <span className="muted">
+                        {focusTally.yes.length + focusTally.maybe.length} of {counted.length} free
+                      </span>
+                    </p>
+                    {focusTally.yes.length > 0 && (
+                      <p>
+                        <span className="swatch yes" aria-hidden="true" /> {focusTally.yes.map(nameOf).join(', ')}
+                      </p>
+                    )}
+                    {focusTally.maybe.length > 0 && (
+                      <p>
+                        <span className="swatch maybe" aria-hidden="true" /> if needed: {focusTally.maybe.map(nameOf).join(', ')}
+                      </p>
+                    )}
+                    {(() => {
+                      const away = counted.filter((p) => !focusTally.yes.includes(p.id) && !focusTally.maybe.includes(p.id));
+                      return away.length > 0 ? <p className="muted">not free: {away.map((p) => p.name).join(', ')}</p> : null;
+                    })()}
+                  </>
+                ) : (
+                  <p className="muted">
+                    Tap a window to see who’s free then.
                   </p>
-                  {focusTally.yes.length > 0 && (
-                    <p>
-                      <span className="swatch yes" aria-hidden="true" /> {focusTally.yes.map(nameOf).join(', ')}
-                    </p>
-                  )}
-                  {focusTally.maybe.length > 0 && (
-                    <p>
-                      <span className="swatch maybe" aria-hidden="true" /> if needed: {focusTally.maybe.map(nameOf).join(', ')}
-                    </p>
-                  )}
-                  {(() => {
-                    const away = counted.filter((p) => !focusTally.yes.includes(p.id) && !focusTally.maybe.includes(p.id));
-                    return away.length > 0 ? <p className="muted">not free: {away.map((p) => p.name).join(', ')}</p> : null;
-                  })()}
-                </>
-              ) : (
-                <p className="muted">
-                  {counted.length === 0 ? 'No answers to show yet.' : 'Tap or hover a slot to see who’s free.'}
-                </p>
-              )}
-            </div>
+                )}
+              </div>
+              </>
+            )}
             <h3 className="sub-heading">People</h3>
             <People
               people={people}

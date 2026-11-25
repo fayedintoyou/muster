@@ -5,6 +5,7 @@ import {
   LIMITS,
   cleanMarks,
   cleanPersonRoles,
+  cleanSpec,
   nameKey,
   validateName,
   validatePassword,
@@ -23,6 +24,8 @@ interface StoredPerson {
   name: string;
   key: string;
   roles: string[];
+  /** Missing on people who answered before there was a spec. */
+  spec?: string;
   marks: Person['marks'];
   salt?: string;
   pass?: string;
@@ -46,6 +49,9 @@ export interface JoinInput {
   name?: unknown;
   password?: unknown;
   roles?: unknown;
+  spec?: unknown;
+  /** Times marked before joining, so a new person's answers arrive in one step. */
+  marks?: unknown;
   /** Sign in as an existing person of that name. */
   claim?: unknown;
 }
@@ -53,6 +59,7 @@ export interface JoinInput {
 export interface SaveInput {
   marks?: unknown;
   roles?: unknown;
+  spec?: unknown;
   name?: unknown;
   password?: unknown;
 }
@@ -64,7 +71,15 @@ function fail(status: number, error: string, extra: Partial<Failure> = {}): Fail
 }
 
 function publicPerson(p: StoredPerson): Person {
-  return { id: p.id, name: p.name, roles: p.roles, marks: p.marks, hasPassword: Boolean(p.pass), updated: p.updated };
+  return {
+    id: p.id,
+    name: p.name,
+    roles: p.roles,
+    spec: p.spec ?? '',
+    marks: p.marks,
+    hasPassword: Boolean(p.pass),
+    updated: p.updated,
+  };
 }
 
 export class PollObject extends DurableObject<Env> {
@@ -141,7 +156,21 @@ export class PollObject extends DurableObject<Env> {
       const current = this.kv.get<StoredPerson>(`p:${existingBefore.id}`);
       if (!current) return fail(409, 'That person was just removed. Try again.');
       current.tokens = [...current.tokens, tokenHash].slice(-MAX_TOKENS);
+      // Times marked on this device only count if they hadn't marked any yet: signing in on a second
+      // device mustn't wipe what they marked on the first.
+      const claimPoll = this.poll();
+      let changed = false;
+      if (claimPoll && input.marks !== undefined && Object.keys(current.marks).length === 0) {
+        const marks = cleanMarks(input.marks, new Set(slotKeys(claimPoll)));
+        if (!marks.ok) return fail(400, marks.error);
+        if (Object.keys(marks.value).length > 0) {
+          current.marks = marks.value;
+          current.updated = Date.now();
+          changed = true;
+        }
+      }
       this.kv.put(`p:${current.id}`, current);
+      if (changed) this.bump();
       return { ok: true, person: publicPerson(current), token, state: this.state()! };
     }
 
@@ -151,6 +180,8 @@ export class PollObject extends DurableObject<Env> {
     const people = this.people();
     if (people.some((p) => p.key === key)) return fail(409, `${name.value} has already answered.`, { exists: true });
     if (people.length >= LIMITS.people) return fail(400, `This poll is full (${LIMITS.people} people).`);
+    const marks = input.marks === undefined ? undefined : cleanMarks(input.marks, new Set(slotKeys(poll)));
+    if (marks && !marks.ok) return fail(400, marks.error);
     let id = randomId();
     while (this.kv.get(`p:${id}`)) id = randomId();
     const now = Date.now();
@@ -159,7 +190,8 @@ export class PollObject extends DurableObject<Env> {
       name: name.value,
       key,
       roles: cleanPersonRoles(input.roles, poll.roles),
-      marks: {},
+      spec: cleanSpec(input.spec),
+      marks: marks?.ok ? marks.value : {},
       salt: secret?.salt,
       pass: secret?.hash,
       tokens: [tokenHash],
@@ -192,6 +224,7 @@ export class PollObject extends DurableObject<Env> {
       person.marks = marks.value;
     }
     if (input.roles !== undefined) person.roles = cleanPersonRoles(input.roles, poll.roles);
+    if (input.spec !== undefined) person.spec = cleanSpec(input.spec);
     if (input.name !== undefined) {
       const name = validateName(input.name);
       if (!name.ok) return fail(400, name.error);

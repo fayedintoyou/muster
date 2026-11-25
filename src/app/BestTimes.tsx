@@ -64,8 +64,12 @@ export function BestTimes({
         {required.size > 0 && <p className="hint">Only windows {names([...required], nameOf)} can all make.</p>}
       </div>
 
-      {answered.length === 0 ? (
-        <p className="empty">Once people mark their times, the best windows show up here.</p>
+      {answered.length < 2 ? (
+        <p className="empty">
+          {answered.length === 0
+            ? 'Once people mark their times, the nights that suit the most of you show up here.'
+            : 'One answer so far. Once a second person marks their times, the nights that suit the most of you show up here.'}
+        </p>
       ) : result.candidates.length === 0 ? (
         <p className="empty">
           {result.requiredUnmet

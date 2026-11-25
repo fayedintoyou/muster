@@ -14,8 +14,19 @@ inside that.
 ## How it deploys
 
 Every push to `main` runs the tests (unit, typecheck and the Chrome e2e run), then `npm run deploy`
-(`.github/workflows/deploy.yml`). Pushes to other branches and pull requests run the tests only. There
-are no preview deploys: a Worker preview would share the live polls' Durable Objects.
+(`.github/workflows/deploy.yml`). Pushes to other branches and pull requests run the tests only.
+
+## Previews
+
+To try a branch before it goes live, deploy it as the separate `muster-preview` Worker (the `preview`
+environment in `wrangler.jsonc`):
+
+```sh
+npm run deploy:preview     # https://muster-preview.fayelore.workers.dev
+```
+
+It has its own Durable Objects, so its polls are separate from the live ones, and its links only work
+there. CI doesn't deploy it: it's one shared address, so the last branch deployed wins.
 
 Unlike the room and lineage, which are private and run on the Mac's self-hosted runners, muster is a
 public repository, so its jobs run on GitHub's own machines: free for public repositories, and they

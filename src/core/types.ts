@@ -33,6 +33,8 @@ export interface Person {
   id: string;
   name: string;
   roles: string[];
+  /** Free text, such as a class and spec. Empty when not given. */
+  spec: string;
   marks: Marks;
   hasPassword: boolean;
   updated: number;

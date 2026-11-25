@@ -15,7 +15,8 @@
     "test:e2e": "vite build && node e2e/run.mjs",
     "types": "wrangler types worker/worker-configuration.d.ts",
     "art": "node scripts/art.mjs",
-    "deploy": "vite build && wrangler deploy"
+    "deploy": "vite build && wrangler deploy",
+    "deploy:preview": "vite build && wrangler deploy --env preview"
   },
   "dependencies": {
     "@fontsource-variable/fraunces": "5.3.0",

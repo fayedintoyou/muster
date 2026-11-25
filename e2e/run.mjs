@@ -101,7 +101,8 @@ try {
   const p1 = await phone.newPage();
   watch(p1, 'phone');
   await p1.goto(`${BASE}/`);
-  await p1.waitForSelector('.pane-cell');
+  await p1.waitForSelector('.street .window');
+  assert.equal(await p1.locator('.street .house').count(), 7, 'the home street has a house for each night');
   await p1.waitForTimeout(2500);
   await shot(p1, '01-home-phone');
 
@@ -115,34 +116,49 @@ try {
   const pollUrl = p1.url();
   const pollId = pollUrl.split('/').pop();
   await p1.waitForSelector('.share-panel');
+  assert.match(await p1.locator('.share-panel').innerText(), /Mark your own times first/, 'the maker is told what to do next');
+  // Someone opening the poll marks their times first, then says who they are.
+  assert.ok(await p1.locator('.panel-mine .first-steps').isVisible(), 'a first-time visitor sees how answering works');
+  assert.ok(await p1.locator('.panel-mine .paint .cell').first().isVisible(), 'the grid to mark is there before joining');
+  assert.ok(await p1.locator('.how.first').isVisible(), 'the first-time drag hint shows before any marks');
+  assert.equal(await p1.locator('.paint-wrap[data-demo]').count(), 1, 'the demo drag plays before any marks');
+  assert.equal(await p1.locator('.next-step').count(), 0, 'no next step before any marks');
   await shot(p1, '02-made-phone');
-
-  await p1.fill('#join-name', 'Faye');
-  await p1.click('.join .chip:text("tank")');
-  await p1.click('button:text("start marking times")');
-  await p1.waitForSelector('.paint .cell');
 
   const cdp = await phone.newCDPSession(p1);
   // Drag Tue 8pm → Wed 10:30pm: two nights, six half hours each.
   await touchDrag(p1, cdp, '.paint .cell[data-key="w2/1200"]', '.paint .cell[data-key="w3/1350"]');
+  assert.equal(await p1.locator('.paint-wrap[data-demo]').count(), 0, 'the demo stops once times are marked');
   // Then Thu 9pm and 9:30pm as "if needed", by tapping.
   await p1.click('.tool button:text("if needed")');
   await tap(p1, cdp, '.paint .cell[data-key="w4/1260"]');
   await tap(p1, cdp, '.paint .cell[data-key="w4/1290"]');
-  await p1.waitForSelector('.save-state.saved');
-  const mine = { ...(await marks(p1, 'w2')), ...(await marks(p1, 'w3')), ...(await marks(p1, 'w4')) };
-  assert.equal(Object.values(mine).filter((m) => m === 2).length, 12, 'touch drag filled a 2×6 rectangle');
-  assert.deepEqual(
-    Object.entries(mine).filter(([, m]) => m === 1).map(([k]) => k).sort(),
-    ['w4/1260', 'w4/1290'],
-    'taps marked "if needed"',
-  );
-  // Starting a drag on an "if needed" slot with that tool clears.
+  // Starting on an "if needed" slot with that tool clears it.
   await tap(p1, cdp, '.paint .cell[data-key="w4/1290"]');
-  await p1.waitForSelector('.save-state.saved');
-  assert.equal((await marks(p1, 'w4'))['w4/1290'], undefined, 'tap on a marked slot clears it');
   await p1.click('.tool button:text("available")');
+  await shot(p1, '02b-marked-before-joining-phone');
+
+  await p1.fill('#join-name', 'Faye');
+  await p1.click('.join .chip:text("tank")');
+  await p1.fill('#join-spec', 'Prot paladin');
+  await p1.click('button:text("save my times")');
+  await p1.waitForSelector('.me-line');
+  // What shows now is the saved copy from the server, so this checks the times went along with the join.
+  const mine = { ...(await marks(p1, 'w2')), ...(await marks(p1, 'w3')), ...(await marks(p1, 'w4')) };
+  assert.equal(Object.values(mine).filter((m) => m === 2).length, 12, 'touch drag filled a 2×6 rectangle, saved on join');
+  assert.deepEqual(
+    Object.entries(mine).filter(([, m]) => m === 1).map(([k]) => k),
+    ['w4/1260'],
+    'a tap marked "if needed" and a second tap cleared one',
+  );
+  assert.equal(await p1.locator('.how.first').count(), 0, 'the first-time hint goes once times are marked');
+  assert.ok(await p1.locator('.next-step').isVisible(), 'the next step shows once times are marked');
+  assert.equal(await p1.locator('.my-spec input').inputValue(), 'Prot paladin', 'the class and spec were saved');
   await shot(p1, '03-painted-phone');
+  await p1.click('.next-step button:text("see who else is free")');
+  assert.equal(await p1.locator('#tab-group').getAttribute('aria-selected'), 'true', 'the next step opens everyone');
+  assert.equal(await p1.locator('.person-spec').innerText(), 'Prot paladin', 'everyone sees the class and spec');
+  await p1.click('#tab-mine');
 
   // ---- A desktop in Berlin, 24-hour clock ----
   const desk = await browser.newContext({
@@ -153,9 +169,6 @@ try {
   const p2 = await desk.newPage();
   watch(p2, 'desk');
   await p2.goto(pollUrl);
-  await p2.fill('#join-name', 'Bo');
-  await p2.click('.join .chip:text("healer")');
-  await p2.click('button:text("start marking times")');
   await p2.waitForSelector('.paint .cell');
   const rowLabel = await p2.locator('.paint .row-head').first().innerText();
   assert.match(rowLabel, /^02:00/, `Berlin sees the 8pm ET start as 02:00 (got ${rowLabel})`);
@@ -165,7 +178,16 @@ try {
   await p2.mouse.down();
   await p2.mouse.move(to.x, to.y, { steps: 12 });
   await p2.mouse.up();
-  await p2.waitForSelector('.save-state.saved');
+  // Saving without a name says so and puts the cursor in the name field, rather than doing nothing.
+  await p2.click('button:text("save my times")');
+  assert.match(await p2.locator('#join-name-missing').innerText(), /Add your name/, 'saving without a name says what’s missing');
+  assert.equal(await p2.evaluate(() => document.activeElement?.id), 'join-name', 'and focuses the name field');
+  assert.equal(await p2.locator('.me-line').count(), 0, 'nothing is saved without a name');
+  await p2.fill('#join-name', 'Bo');
+  assert.equal(await p2.locator('#join-name-missing').count(), 0, 'typing a name clears the message');
+  await p2.click('.join .chip:text("healer")');
+  await p2.click('button:text("save my times")');
+  await p2.waitForSelector('.me-line');
   const bo = { ...(await marks(p2, 'w2')), ...(await marks(p2, 'w3')), ...(await marks(p2, 'w4')) };
   assert.equal(Object.keys(bo).length, 18, 'mouse drag filled a 3×6 rectangle');
 
@@ -256,9 +278,10 @@ try {
   const p4 = await phone.newPage();
   watch(p4, 'phone-dense');
   await p4.goto(`${BASE}/e/${dense.id}`);
+  // Saving a name before marking anything works too: the times then save as they're marked.
   await p4.fill('#join-name', 'Faye');
-  await p4.click('button:text("start marking times")');
-  await p4.waitForSelector('.paint .cell');
+  await p4.click('button:text("save my times")');
+  await p4.waitForSelector('.me-line');
   const cdp4 = await phone.newCDPSession(p4);
   await touchDrag(p4, cdp4, '.paint .cell[data-key="w1/1200"]', '.paint .cell[data-key="w5/1305"]');
   await p4.waitForSelector('.save-state.saved');

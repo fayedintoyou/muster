@@ -1,18 +1,27 @@
-import { type FormEvent, useState } from 'react';
-import type { Person, Poll, PollState } from '../core/types';
+import { type FormEvent, useRef, useState } from 'react';
+import type { Marks, Person, Poll, PollState } from '../core/types';
 import { LIMITS } from '../core/validate';
 import { ApiError, api } from './api';
 import { store } from './store';
 
+// Who's answering, after they've marked their times: a name or in-game handle, the roles they'd bring
+// and, if they like, a class and spec. Saving sends the times along with it.
 export function JoinForm({
   poll,
+  marks,
   onJoined,
 }: {
   poll: Poll;
+  /** The times marked so far on this device. */
+  marks: Marks;
   onJoined: (person: Person, token: string, state: PollState) => void;
 }) {
   const [name, setName] = useState(() => store.lastName());
   const [roles, setRoles] = useState<string[]>(() => store.lastRoles().filter((r) => poll.roles.includes(r)));
+  const [spec, setSpec] = useState(() => store.lastSpec());
+  const marked = Object.keys(marks).length;
+  const [nameMissing, setNameMissing] = useState(false);
+  const nameField = useRef<HTMLInputElement>(null);
   const [locking, setLocking] = useState(false);
   const [password, setPassword] = useState('');
   const [claim, setClaim] = useState<{ name: string; hasPassword: boolean } | null>(null);
@@ -23,9 +32,17 @@ export function JoinForm({
     setError('');
     setBusy(true);
     try {
-      const result = await api.join(poll.id, { name, password: password || undefined, roles, claim: asExisting });
+      const result = await api.join(poll.id, {
+        name,
+        password: password || undefined,
+        roles,
+        spec,
+        marks,
+        claim: asExisting,
+      });
       store.setLastName(result.person.name);
       if (roles.length) store.setLastRoles(roles);
+      store.setLastSpec(spec.trim());
       onJoined(result.person, result.token, result.state);
     } catch (err) {
       if (err instanceof ApiError && err.status === 409 && err.extra.exists) {
@@ -40,15 +57,23 @@ export function JoinForm({
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
+    // The button stays pressable without a name, so a press always does something: it says what's missing.
+    if (!claim && !name.trim()) {
+      setNameMissing(true);
+      nameField.current?.focus();
+      nameField.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      return;
+    }
     void join(claim !== null);
   };
 
   if (claim) {
     return (
-      <form className="join" onSubmit={submit}>
+      <form className="join" onSubmit={submit} noValidate>
         <h3 className="panel-title">{claim.name} has already answered</h3>
         <p className="lede-small">
           If that’s you on another device, carry on where you left off. Otherwise pick a different name.
+          {marked > 0 && ' If you’d already marked times there, those are kept rather than the ones above.'}
         </p>
         {claim.hasPassword && (
           <div className="field">
@@ -89,19 +114,30 @@ export function JoinForm({
   }
 
   return (
-    <form className="join" onSubmit={submit}>
-      <h3 className="panel-title">Add your times</h3>
+    <form className="join" onSubmit={submit} noValidate>
+      <h3 className="panel-title">Then, who’s this?</h3>
       <div className="field">
-        <label htmlFor="join-name">Your name</label>
+        <label htmlFor="join-name">Name or in-game handle</label>
         <input
           id="join-name"
+          ref={nameField}
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => {
+            setName(e.target.value);
+            if (e.target.value.trim()) setNameMissing(false);
+          }}
+          aria-invalid={nameMissing || undefined}
+          aria-describedby={nameMissing ? 'join-name-missing' : undefined}
           maxLength={LIMITS.name}
           autoComplete="nickname"
-          placeholder="The name the guild knows you by"
+          placeholder="What the guild calls you"
           required
         />
+        {nameMissing && (
+          <p className="error" id="join-name-missing" role="alert">
+            Add your name or in-game handle first, so the guild knows whose times these are.
+          </p>
+        )}
         <p className="hint">Answered already on another device? Use the same name to pick up where you left off.</p>
       </div>
       {poll.roles.length > 0 && (
@@ -123,6 +159,19 @@ export function JoinForm({
           <p className="hint">Pick every role you’d bring.</p>
         </fieldset>
       )}
+      <div className="field">
+        <label htmlFor="join-spec">
+          Class and spec <span className="muted">(optional)</span>
+        </label>
+        <input
+          id="join-spec"
+          value={spec}
+          onChange={(e) => setSpec(e.target.value)}
+          maxLength={LIMITS.spec}
+          autoComplete="off"
+          placeholder="Resto shaman, or a main and an alt"
+        />
+      </div>
       {locking ? (
         <div className="field">
           <label htmlFor="join-password">Password (optional)</label>
@@ -148,8 +197,9 @@ export function JoinForm({
           {error}
         </p>
       )}
-      <button className="button primary wide" type="submit" disabled={busy || !name.trim()}>
-        {busy ? 'joining…' : 'start marking times'}
+      {marked === 0 && <p className="hint">You haven’t marked any times above yet. You can save now and mark them after.</p>}
+      <button className="button primary wide" type="submit" disabled={busy}>
+        {busy ? 'saving…' : 'save my times'}
       </button>
     </form>
   );

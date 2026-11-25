@@ -144,7 +144,10 @@ export function PollForm({
               </button>
             ))}
           </div>
-          <p className="hint">Everyone answers for a typical week. Good for a standing raid schedule.</p>
+          <p className="hint">
+            Not sure which nights yet? Leave them all on: everyone marks the ones that work for them in a typical
+            week, and muster finds the best.
+          </p>
         </fieldset>
       ) : (
         <fieldset className="field">
