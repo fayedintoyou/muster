@@ -50,7 +50,10 @@ export const api = {
   destroy(id: string, admin: string) {
     return call<{ ok: true }>(`/api/polls/${id}`, { method: 'DELETE', admin });
   },
-  join(id: string, input: { name: string; password?: string; roles?: string[]; claim?: boolean }) {
+  join(
+    id: string,
+    input: { name: string; password?: string; roles?: string[]; spec?: string; marks?: Marks; claim?: boolean },
+  ) {
     return call<{ person: Person; token: string; state: PollState }>(`/api/polls/${id}/people`, {
       method: 'POST',
       body: JSON.stringify(input),
@@ -60,7 +63,7 @@ export const api = {
     id: string,
     personId: string,
     auth: { token?: string; admin?: string },
-    input: { marks?: Marks; roles?: string[]; name?: string; password?: string },
+    input: { marks?: Marks; roles?: string[]; spec?: string; name?: string; password?: string },
     keepalive = false,
   ) {
     return call<{ person: Person; version: number }>(`/api/polls/${id}/people/${personId}`, {

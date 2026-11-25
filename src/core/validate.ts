@@ -12,6 +12,7 @@ export const LIMITS = {
   roles: 6,
   role: 16,
   name: 32,
+  spec: 40,
   password: 64,
   people: 150,
   minLength: 15,
@@ -153,6 +154,11 @@ export function cleanMarks(input: unknown, validKeys: ReadonlySet<string>): Resu
     if (value === 1 || value === 2) out[key] = value;
   }
   return ok(out);
+}
+
+/** A person's class, spec or anything else they'd like next to their name. Optional. */
+export function cleanSpec(input: unknown): string {
+  return cleanLine(input, LIMITS.spec);
 }
 
 /** Roles a person picked, kept to the poll's own. */

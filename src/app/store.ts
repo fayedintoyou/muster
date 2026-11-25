@@ -51,6 +51,12 @@ export const store = {
   setLastRoles(roles: string[]): void {
     write('muster:roles', roles);
   },
+  lastSpec(): string {
+    return read<string>('muster:spec', '');
+  },
+  setLastSpec(spec: string): void {
+    write('muster:spec', spec);
+  },
   zone(): string | undefined {
     return read<string | undefined>('muster:tz', undefined);
   },
