@@ -131,6 +131,8 @@ h1, h2, h3 { margin: 0; font-weight: 400; }
 .sub-heading { font-size: 1.0625rem; font-weight: 500; margin: 1.75rem 0 0.5rem; }
 .hint { color: var(--muted); font-size: 0.875rem; line-height: 1.45; margin: 0.45rem 0 0; }
 .error { color: var(--accent); font-size: 0.9375rem; margin: 0.75rem 0; }
+input[aria-invalid='true'] { border-color: var(--accent); }
+.field .error { margin: 0.1rem 0 0; }
 .empty { color: var(--muted); padding: 1rem 0; max-width: 34rem; }
 .loading { color: var(--muted); }
 

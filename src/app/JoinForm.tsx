@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useRef, useState } from 'react';
 import type { Marks, Person, Poll, PollState } from '../core/types';
 import { LIMITS } from '../core/validate';
 import { ApiError, api } from './api';
@@ -20,6 +20,8 @@ export function JoinForm({
   const [roles, setRoles] = useState<string[]>(() => store.lastRoles().filter((r) => poll.roles.includes(r)));
   const [spec, setSpec] = useState(() => store.lastSpec());
   const marked = Object.keys(marks).length;
+  const [nameMissing, setNameMissing] = useState(false);
+  const nameField = useRef<HTMLInputElement>(null);
   const [locking, setLocking] = useState(false);
   const [password, setPassword] = useState('');
   const [claim, setClaim] = useState<{ name: string; hasPassword: boolean } | null>(null);
@@ -55,12 +57,19 @@ export function JoinForm({
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
+    // The button stays pressable without a name, so a press always does something: it says what's missing.
+    if (!claim && !name.trim()) {
+      setNameMissing(true);
+      nameField.current?.focus();
+      nameField.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      return;
+    }
     void join(claim !== null);
   };
 
   if (claim) {
     return (
-      <form className="join" onSubmit={submit}>
+      <form className="join" onSubmit={submit} noValidate>
         <h3 className="panel-title">{claim.name} has already answered</h3>
         <p className="lede-small">
           If that’s you on another device, carry on where you left off. Otherwise pick a different name.
@@ -105,19 +114,30 @@ export function JoinForm({
   }
 
   return (
-    <form className="join" onSubmit={submit}>
+    <form className="join" onSubmit={submit} noValidate>
       <h3 className="panel-title">Then, who’s this?</h3>
       <div className="field">
         <label htmlFor="join-name">Name or in-game handle</label>
         <input
           id="join-name"
+          ref={nameField}
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => {
+            setName(e.target.value);
+            if (e.target.value.trim()) setNameMissing(false);
+          }}
+          aria-invalid={nameMissing || undefined}
+          aria-describedby={nameMissing ? 'join-name-missing' : undefined}
           maxLength={LIMITS.name}
           autoComplete="nickname"
           placeholder="What the guild calls you"
           required
         />
+        {nameMissing && (
+          <p className="error" id="join-name-missing" role="alert">
+            Add your name or in-game handle first, so the guild knows whose times these are.
+          </p>
+        )}
         <p className="hint">Answered already on another device? Use the same name to pick up where you left off.</p>
       </div>
       {poll.roles.length > 0 && (
@@ -178,7 +198,7 @@ export function JoinForm({
         </p>
       )}
       {marked === 0 && <p className="hint">You haven’t marked any times above yet. You can save now and mark them after.</p>}
-      <button className="button primary wide" type="submit" disabled={busy || !name.trim()}>
+      <button className="button primary wide" type="submit" disabled={busy}>
         {busy ? 'saving…' : 'save my times'}
       </button>
     </form>

@@ -178,7 +178,13 @@ try {
   await p2.mouse.down();
   await p2.mouse.move(to.x, to.y, { steps: 12 });
   await p2.mouse.up();
+  // Saving without a name says so and puts the cursor in the name field, rather than doing nothing.
+  await p2.click('button:text("save my times")');
+  assert.match(await p2.locator('#join-name-missing').innerText(), /Add your name/, 'saving without a name says what’s missing');
+  assert.equal(await p2.evaluate(() => document.activeElement?.id), 'join-name', 'and focuses the name field');
+  assert.equal(await p2.locator('.me-line').count(), 0, 'nothing is saved without a name');
   await p2.fill('#join-name', 'Bo');
+  assert.equal(await p2.locator('#join-name-missing').count(), 0, 'typing a name clears the message');
   await p2.click('.join .chip:text("healer")');
   await p2.click('button:text("save my times")');
   await p2.waitForSelector('.me-line');
