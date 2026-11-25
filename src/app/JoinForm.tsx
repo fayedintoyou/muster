@@ -3,6 +3,7 @@ import type { Marks, Person, Poll, PollState } from '../core/types';
 import { LIMITS } from '../core/validate';
 import { ApiError, api } from './api';
 import { store } from './store';
+import { ClassPicker } from './ClassPicker';
 
 // Who's answering, after they've marked their times: a name or in-game handle, the roles they'd bring
 // and, if they like, a class and spec. Saving sends the times along with it.
@@ -18,6 +19,7 @@ export function JoinForm({
 }) {
   const [name, setName] = useState(() => store.lastName());
   const [roles, setRoles] = useState<string[]>(() => store.lastRoles().filter((r) => poll.roles.includes(r)));
+  const [cls, setCls] = useState(() => (poll.classes.includes(store.lastClass()) ? store.lastClass() : ''));
   const [spec, setSpec] = useState(() => store.lastSpec());
   const [note, setNote] = useState('');
   const marked = Object.keys(marks).length;
@@ -37,6 +39,7 @@ export function JoinForm({
         name,
         password: password || undefined,
         roles,
+        cls,
         spec,
         note,
         marks,
@@ -45,6 +48,7 @@ export function JoinForm({
       store.setLastName(result.person.name);
       if (roles.length) store.setLastRoles(roles);
       store.setLastSpec(spec.trim());
+      if (cls) store.setLastClass(cls);
       onJoined(result.person, result.token, result.state);
     } catch (err) {
       if (err instanceof ApiError && err.status === 409 && err.extra.exists) {
@@ -161,19 +165,32 @@ export function JoinForm({
           <p className="hint">Pick every role you’d bring.</p>
         </fieldset>
       )}
-      <div className="field">
-        <label htmlFor="join-spec">
-          Class and spec <span className="muted">(optional)</span>
-        </label>
-        <input
-          id="join-spec"
-          value={spec}
-          onChange={(e) => setSpec(e.target.value)}
-          maxLength={LIMITS.spec}
-          autoComplete="off"
-          placeholder="Resto shaman, or a main and an alt"
+      {poll.classes.length > 0 ? (
+        <ClassPicker
+          classes={poll.classes}
+          cls={cls}
+          spec={spec}
+          idPrefix="join"
+          onChange={(c, s) => {
+            setCls(c);
+            setSpec(s);
+          }}
         />
-      </div>
+      ) : (
+        <div className="field">
+          <label htmlFor="join-spec">
+            Class and spec <span className="muted">(optional)</span>
+          </label>
+          <input
+            id="join-spec"
+            value={spec}
+            onChange={(e) => setSpec(e.target.value)}
+            maxLength={LIMITS.spec}
+            autoComplete="off"
+            placeholder="Resto shaman, or a main and an alt"
+          />
+        </div>
+      )}
       <div className="field">
         <label htmlFor="join-note">
           A note for the organizer <span className="muted">(optional)</span>

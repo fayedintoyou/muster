@@ -2,6 +2,7 @@ import { type FormEvent, useMemo, useState } from 'react';
 import type { Mode, PollSettings, SlotSize } from '../core/types';
 import { SLOT_SIZES, validateSettings } from '../core/validate';
 import { WEEK_ORDER, slotKeys } from '../core/slots';
+import { WOW_CLASSES } from '../core/classes';
 import { formatDuration, formatMinute, weekdayName } from '../core/format';
 import { today, windowLength } from '../core/time';
 import { DatePicker } from './DatePicker';
@@ -18,6 +19,7 @@ export const DEFAULT_SETTINGS: PollSettings = {
   slot: 30,
   tz: detectedZone(),
   roles: ['tank', 'healer', 'dps'],
+  classes: [...WOW_CLASSES],
   length: 180,
 };
 
@@ -51,6 +53,10 @@ export function PollForm({
   const [tz, setTz] = useState(initial.tz);
   const [rolesOn, setRolesOn] = useState(initial.roles.length > 0);
   const [rolesText, setRolesText] = useState((initial.roles.length ? initial.roles : DEFAULT_SETTINGS.roles).join(', '));
+  const [classesOn, setClassesOn] = useState(initial.classes.length > 0);
+  const [classesText, setClassesText] = useState(
+    (initial.classes.length ? initial.classes : DEFAULT_SETTINGS.classes).join(', '),
+  );
   const [length, setLength] = useState(initial.length);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -65,6 +71,7 @@ export function PollForm({
     slot,
     tz,
     roles: rolesOn ? rolesText.split(',').map((r) => r.trim()).filter(Boolean) : [],
+    classes: classesOn ? classesText.split(',').map((c) => c.trim()).filter(Boolean) : [],
     length,
   };
 
@@ -220,6 +227,25 @@ export function PollForm({
             placeholder="tank, healer, dps"
             autoComplete="off"
           />
+        )}
+      </fieldset>
+
+      <fieldset className="field">
+        <legend>Classes</legend>
+        <label className="check">
+          <input type="checkbox" checked={classesOn} onChange={(e) => setClassesOn(e.target.checked)} />
+          <span>Ask which class and spec everyone plays, and count them</span>
+        </label>
+        {classesOn && (
+          <>
+            <input
+              aria-label="Classes, separated by commas"
+              value={classesText}
+              onChange={(e) => setClassesText(e.target.value)}
+              autoComplete="off"
+            />
+            <p className="hint">WoW Forever’s nine. The specs for each come with them.</p>
+          </>
         )}
       </fieldset>
 

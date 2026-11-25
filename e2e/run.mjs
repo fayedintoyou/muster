@@ -140,7 +140,10 @@ try {
 
   await p1.fill('#join-name', 'Faye');
   await p1.click('.join .chip:text("tank")');
-  await p1.fill('#join-spec', 'Prot paladin');
+  // Classes come as buttons in WoW's class colours; picking one offers its specs.
+  await p1.click('.join .class-chip:text-is("paladin")');
+  assert.deepEqual(await p1.locator('.join .class-picker fieldset:nth-of-type(2) .class-chip').allInnerTexts(), ['holy', 'protection', 'retribution'], 'a paladin picks from paladin specs');
+  await p1.click('.join .class-chip:text-is("protection")');
   await p1.fill('#join-note', 'Fridays I might be late');
   await p1.click('button:text("save my times")');
   await p1.waitForSelector('.me-line');
@@ -154,11 +157,11 @@ try {
   );
   assert.equal(await p1.locator('.how.first').count(), 0, 'the first-time hint goes once times are marked');
   assert.ok(await p1.locator('.next-step').isVisible(), 'the next step shows once times are marked');
-  assert.equal(await p1.locator('.my-spec input').inputValue(), 'Prot paladin', 'the class and spec were saved');
+  assert.deepEqual(await p1.locator('.my-class .class-chip[aria-pressed="true"]').allInnerTexts(), ['paladin', 'protection'], 'the class and spec were saved');
   await shot(p1, '03-painted-phone');
   await p1.click('.next-step button:text("see who else is free")');
   assert.equal(await p1.locator('#tab-group').getAttribute('aria-selected'), 'true', 'the next step opens everyone');
-  assert.equal(await p1.locator('.person-spec').innerText(), 'Prot paladin', 'everyone sees the class and spec');
+  assert.equal(await p1.locator('.people-list .class-name').innerText(), 'protection paladin', 'everyone sees the class and spec');
   assert.equal(await p1.locator('.person-note').innerText(), 'Fridays I might be late', 'everyone sees the note');
   await p1.click('#tab-mine');
   // The note can be changed after joining; it saves when the field loses focus.
@@ -210,6 +213,8 @@ try {
   assert.equal(await p2.evaluate(() => document.activeElement?.id), 'join-name', 'and focuses the name field');
   assert.equal(await p2.locator('.me-line').count(), 0, 'nothing is saved without a name');
   await p2.fill('#join-name', 'Bo');
+  await p2.click('.join .class-chip:text-is("priest")');
+  await p2.click('.join .class-chip:text-is("holy")');
   assert.equal(await p2.locator('#join-name-missing').count(), 0, 'typing a name clears the message');
   await p2.click('.join .chip:text("healer")');
   await p2.click('button:text("save my times")');
@@ -218,11 +223,11 @@ try {
   assert.equal(Object.keys(bo).length, 18, 'mouse drag filled a 3×6 rectangle');
 
   // ---- Two more people, straight through the API ----
-  const join = async (name, roles, keys, mark = 2) => {
+  const join = async (name, roles, keys, mark = 2, cls = '') => {
     const r = await fetch(`${BASE}/api/polls/${pollId}/people`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name, roles }),
+      body: JSON.stringify({ name, roles, cls }),
     }).then((x) => x.json());
     await fetch(`${BASE}/api/polls/${pollId}/people/${r.person.id}`, {
       method: 'PUT',
@@ -235,8 +240,8 @@ try {
     for (let m = from; m < to; m += 30) out.push(`${day}/${m}`);
     return out;
   };
-  await join('Cy', ['dps'], [...span('w3', 1230, 1440), ...span('w4', 1200, 1500)]);
-  await join('Dee', ['dps', 'healer'], [...span('w4', 1200, 1440), ...span('w2', 1290, 1500)]);
+  await join('Cy', ['dps'], [...span('w3', 1230, 1440), ...span('w4', 1200, 1500)], 2, 'mage');
+  await join('Dee', ['dps', 'healer'], [...span('w4', 1200, 1440), ...span('w2', 1290, 1500)], 2, 'priest');
 
   await p2.reload();
   await p2.waitForSelector('.heat .cell');
@@ -251,12 +256,14 @@ try {
   await tap(p1, cdp, '.heat .cell[data-key="w4/1290"]');
   const detail = await p1.locator('.slot-detail').innerText();
   assert.match(detail, /3 of 4 free/, `slot detail counts (got ${detail})`);
+  assert.equal(await p1.locator('.composition').innerText(), 'Of the 4: 2 priests, 1 paladin, 1 mage', 'everyone shows the class makeup');
   await shot(p1, '05-everyone-phone');
 
   await p1.click('.tabs button:text("best times")');
   await p1.waitForSelector('.best-item');
   const top = await p1.locator('.best-item').first().innerText();
   assert.match(top, /Thursday/, `best window is Thursday (got ${top})`);
+  assert.equal(await p1.locator('.best-item').first().locator('.best-classes').innerText(), '2 priests, 1 mage', 'a best window shows the classes of who can come');
   await shot(p1, '06-best-phone');
   await p1.locator('.best-item').first().locator('button:text("copy for discord")').click();
   await p1.waitForSelector('.best-item button:text("copied")');

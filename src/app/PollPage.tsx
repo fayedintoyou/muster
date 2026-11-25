@@ -15,6 +15,8 @@ import { PaintGrid } from './PaintGrid';
 import { People } from './People';
 import { PollForm } from './PollForm';
 import { ZonePicker } from './ZonePicker';
+import { ClassPicker } from './ClassPicker';
+import { Composition } from './Composition';
 import { useCopied } from './copy';
 import { GLOW_GRADIENT } from './glow';
 import { type Membership, detectedZone, store } from './store';
@@ -304,12 +306,13 @@ export function PollPage({ id }: { id: string }) {
     }
   };
 
-  const saveDetail = async (field: 'spec' | 'note', value: string) => {
-    if (!me || value.trim() === me[field]) return;
+  const saveDetail = async (details: { cls?: string; spec?: string; note?: string }) => {
+    if (!me || Object.entries(details).every(([k, v]) => v.trim() === me[k as 'cls' | 'spec' | 'note'])) return;
     try {
-      const { person } = await api.save(id, me.id, { token: membership.token }, { [field]: value });
+      const { person } = await api.save(id, me.id, { token: membership.token }, details);
       mine.current = { id: person.id, updated: person.updated };
-      if (field === 'spec') store.setLastSpec(person.spec);
+      if (details.spec !== undefined) store.setLastSpec(person.spec);
+      if (person.cls) store.setLastClass(person.cls);
       setState((prev) => prev && { ...prev, people: prev.people.map((p) => (p.id === person.id ? { ...person, marks: p.marks } : p)) });
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : String(err));
@@ -483,18 +486,30 @@ export function PollPage({ id }: { id: string }) {
                     </button>
                   )}
                 </div>
-                <label className="my-spec">
-                  <span className="muted">Class and spec</span>
-                  <input
-                    key={me.spec}
-                    defaultValue={me.spec}
-                    maxLength={LIMITS.spec}
-                    placeholder="optional"
-                    autoComplete="off"
-                    onBlur={(e) => void saveDetail('spec', e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-                  />
-                </label>
+                {poll.classes.length > 0 ? (
+                  <div className="my-class">
+                    <ClassPicker
+                      classes={poll.classes}
+                      cls={me.cls}
+                      spec={me.spec}
+                      idPrefix="mine"
+                      onChange={(cls, spec) => void saveDetail({ cls, spec })}
+                    />
+                  </div>
+                ) : (
+                  <label className="my-spec">
+                    <span className="muted">Class and spec</span>
+                    <input
+                      key={me.spec}
+                      defaultValue={me.spec}
+                      maxLength={LIMITS.spec}
+                      placeholder="optional"
+                      autoComplete="off"
+                      onBlur={(e) => void saveDetail({ spec: e.target.value })}
+                      onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+                    />
+                  </label>
+                )}
                 <label className="my-note">
                   <span className="muted">A note for the organizer</span>
                   <textarea
@@ -503,7 +518,7 @@ export function PollPage({ id }: { id: string }) {
                     maxLength={LIMITS.note}
                     rows={2}
                     placeholder="optional, like “Fridays I might be 30 minutes late”"
-                    onBlur={(e) => void saveDetail('note', e.target.value)}
+                    onBlur={(e) => void saveDetail({ note: e.target.value })}
                   />
                 </label>
                 {!nothingMarked && (
@@ -605,6 +620,7 @@ export function PollPage({ id }: { id: string }) {
               </>
             )}
             <h3 className="sub-heading">People</h3>
+            <Composition people={counted} classes={poll.classes} lead={`Of the ${counted.length}:`} />
             <People
               people={people}
               meId={me?.id}

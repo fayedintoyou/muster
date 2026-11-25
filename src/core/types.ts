@@ -15,6 +15,8 @@ export interface PollSettings {
   tz: string;
   /** Roles people can pick, such as tank, healer, dps. Empty turns roles off. */
   roles: string[];
+  /** Classes people can pick one of, such as WoW's nine. Empty turns classes off. */
+  classes: string[];
   /** How long a raid (or whatever is being planned) runs, in minutes: the length best times look for. */
   length: number;
 }
@@ -33,6 +35,8 @@ export interface Person {
   id: string;
   name: string;
   roles: string[];
+  /** One of the poll's classes, or empty. */
+  cls: string;
   /** Free text, such as a class and spec. Empty when not given. */
   spec: string;
   /** Anything they'd like the organizer to know, such as "Fridays I'm 30 minutes late". Empty when not given. */
