@@ -94,7 +94,8 @@ export function ZonePicker({
   const [open, setOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const root = useRef<HTMLDivElement>(null);
-  const panelId = useId();
+  // React's ids carry characters that don't survive inside url(#…), which the map's clip path needs.
+  const panelId = `zone-${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
   const place = zonePlace(value);
   const isUs = REGIONS.some((r) => r.name === place) || OTHER_US.some((r) => r.name === place);
 
