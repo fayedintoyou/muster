@@ -22,5 +22,19 @@
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["PollObject"] }],
 
   // wrangler deploy attaches the subdomain and creates its DNS record, since fayelore.com is on Cloudflare.
-  "routes": [{ "pattern": "muster.fayelore.com", "custom_domain": true }]
+  "routes": [{ "pattern": "muster.fayelore.com", "custom_domain": true }],
+
+  // A preview to try changes on before they go live: `npm run deploy:preview` puts this branch at
+  // https://muster-preview.fayelore.workers.dev, a separate Worker with its own polls, so nothing there
+  // touches the live ones.
+  "env": {
+    "preview": {
+      "name": "muster-preview",
+      "workers_dev": true,
+      "routes": [],
+      "durable_objects": {
+        "bindings": [{ "name": "POLLS", "class_name": "PollObject" }]
+      }
+    }
+  }
 }

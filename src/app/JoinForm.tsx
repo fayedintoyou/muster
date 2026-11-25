@@ -91,6 +91,10 @@ export function JoinForm({
   return (
     <form className="join" onSubmit={submit}>
       <h3 className="panel-title">Add your times</h3>
+      <p className="first-steps">
+        Put your name in, then drag over the hours you’re free. After that you can see everyone’s answers and
+        the nights that suit the most people.
+      </p>
       <div className="field">
         <label htmlFor="join-name">Your name</label>
         <input

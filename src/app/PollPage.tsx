@@ -330,8 +330,8 @@ export function PollPage({ id }: { id: string }) {
           {justMade ? (
             <div className="share-panel" role="status">
               <p>
-                <strong>Your poll is ready.</strong> Send this link to the guild; it unfurls with the poll’s name in
-                Discord.
+                <strong>Your poll is ready.</strong> Mark your own times first, so the first people to open it see how
+                it works. Then send the link to the guild: pasted in Discord, it shows the poll’s name.
               </p>
               <div className="share-row">
                 <code className="share-link">{link}</code>
@@ -339,7 +339,10 @@ export function PollPage({ id }: { id: string }) {
                   {copied === 'link' ? 'copied' : 'copy link'}
                 </button>
               </div>
-              <p className="hint">This browser can edit the poll. Mark your own times below.</p>
+              <p className="hint">
+                Only this browser can change the poll. You’ll find that at the bottom of the page, under “Change this
+                poll”.
+              </p>
             </div>
           ) : (
             <button type="button" className="button small" onClick={share}>
@@ -411,11 +414,24 @@ export function PollPage({ id }: { id: string }) {
                           : ''}
                   </span>
                 </div>
-                <p className="hint how">
-                  Drag across the times you’re free. Tap a night or a time to fill the whole column or row; start on
-                  a filled slot to clear.
-                </p>
-                <PaintGrid grid={grid} marks={myMarks} tool={tool} onChange={paint} />
+                {Object.keys(myMarks).length === 0 ? (
+                  <p className="hint how first">
+                    Press on a window and drag down to light up the hours you can play. Tap a night’s name to light
+                    the whole night. Use <em>if needed</em> for hours you could do at a push.
+                  </p>
+                ) : (
+                  <p className="hint how">
+                    Drag to light more hours; start on a lit one to clear. Tap a night or a time for the whole column
+                    or row.
+                  </p>
+                )}
+                <PaintGrid
+                  grid={grid}
+                  marks={myMarks}
+                  tool={tool}
+                  onChange={paint}
+                  demo={Object.keys(myMarks).length === 0}
+                />
                 {saveState === 'error' && (
                   <p className="error" role="alert">
                     Not saved: {saveError}{' '}
@@ -456,6 +472,21 @@ export function PollPage({ id }: { id: string }) {
                     </button>
                   )}
                 </div>
+                {Object.keys(myMarks).length > 0 && (
+                  <div className="next-step">
+                    <p>Your times save as you go, so you can close this whenever you’re done.</p>
+                    <button
+                      type="button"
+                      className="button small"
+                      onClick={() => {
+                        setTab('group');
+                        window.scrollTo(0, 0);
+                      }}
+                    >
+                      see who else is free
+                    </button>
+                  </div>
+                )}
               </>
             ) : (
               <JoinForm
@@ -514,7 +545,9 @@ export function PollPage({ id }: { id: string }) {
                 </>
               ) : (
                 <p className="muted">
-                  {counted.length === 0 ? 'No answers to show yet.' : 'Tap or hover a slot to see who’s free.'}
+                  {counted.length === 0
+                    ? 'No answers yet. Each window lights up as people mark when they’re free.'
+                    : 'Tap a window to see who’s free then.'}
                 </p>
               )}
             </div>

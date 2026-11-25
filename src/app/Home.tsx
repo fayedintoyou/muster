@@ -12,21 +12,21 @@ export function Home() {
     <div className="home">
       <header className="topbar">
         <Wordmark />
-        <a className="quiet-link" href="https://fayelore.com">
+        <a className="corner-link" href="https://fayelore.com">
           fayelore.com
         </a>
       </header>
 
       <main className="page">
         <section className="hero">
+          <Panes />
           <div className="hero-text">
             <h1 className="display">Find the night everyone can raid.</h1>
             <p className="lede">
-              Make a poll, drop the link in Discord, and everyone marks when they’re free. Each person sees the
-              times in their own time zone, and muster ranks the best windows for you.
+              Make a poll below and drop its link in Discord. Everyone paints the hours they’re free, each in their
+              own time zone, and muster finds the windows most of you can make.
             </p>
           </div>
-          <Panes />
         </section>
 
         <div className="home-body">

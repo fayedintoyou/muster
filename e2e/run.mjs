@@ -101,7 +101,8 @@ try {
   const p1 = await phone.newPage();
   watch(p1, 'phone');
   await p1.goto(`${BASE}/`);
-  await p1.waitForSelector('.pane-cell');
+  await p1.waitForSelector('.street .window');
+  assert.equal(await p1.locator('.street .house').count(), 7, 'the home street has a house for each night');
   await p1.waitForTimeout(2500);
   await shot(p1, '01-home-phone');
 
@@ -115,12 +116,19 @@ try {
   const pollUrl = p1.url();
   const pollId = pollUrl.split('/').pop();
   await p1.waitForSelector('.share-panel');
+  assert.match(await p1.locator('.share-panel').innerText(), /Mark your own times first/, 'the maker is told what to do next');
+  assert.ok(await p1.locator('.join .first-steps').isVisible(), 'a first-time visitor sees how answering works');
   await shot(p1, '02-made-phone');
 
   await p1.fill('#join-name', 'Faye');
   await p1.click('.join .chip:text("tank")');
   await p1.click('button:text("start marking times")');
   await p1.waitForSelector('.paint .cell');
+  // Before anything is marked: the drag hint, and the first night lighting up to show it.
+  assert.ok(await p1.locator('.how.first').isVisible(), 'the first-time drag hint shows before any marks');
+  assert.equal(await p1.locator('.paint-wrap[data-demo]').count(), 1, 'the demo drag plays before any marks');
+  assert.equal(await p1.locator('.next-step').count(), 0, 'no next step before any marks');
+  await shot(p1, '02b-first-paint-phone');
 
   const cdp = await phone.newCDPSession(p1);
   // Drag Tue 8pm → Wed 10:30pm: two nights, six half hours each.
@@ -142,7 +150,14 @@ try {
   await p1.waitForSelector('.save-state.saved');
   assert.equal((await marks(p1, 'w4'))['w4/1290'], undefined, 'tap on a marked slot clears it');
   await p1.click('.tool button:text("available")');
+  // Once something is marked, the hint and the demo give way to the next step.
+  assert.equal(await p1.locator('.how.first').count(), 0, 'the first-time hint goes once times are marked');
+  assert.equal(await p1.locator('.paint-wrap[data-demo]').count(), 0, 'the demo stops once times are marked');
+  assert.ok(await p1.locator('.next-step').isVisible(), 'the next step shows once times are marked');
   await shot(p1, '03-painted-phone');
+  await p1.click('.next-step button:text("see who else is free")');
+  assert.equal(await p1.locator('#tab-group').getAttribute('aria-selected'), 'true', 'the next step opens everyone');
+  await p1.click('#tab-mine');
 
   // ---- A desktop in Berlin, 24-hour clock ----
   const desk = await browser.newContext({
