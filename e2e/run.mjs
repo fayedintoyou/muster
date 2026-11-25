@@ -141,6 +141,7 @@ try {
   await p1.fill('#join-name', 'Faye');
   await p1.click('.join .chip:text("tank")');
   await p1.fill('#join-spec', 'Prot paladin');
+  await p1.fill('#join-note', 'Fridays I might be late');
   await p1.click('button:text("save my times")');
   await p1.waitForSelector('.me-line');
   // What shows now is the saved copy from the server, so this checks the times went along with the join.
@@ -158,7 +159,15 @@ try {
   await p1.click('.next-step button:text("see who else is free")');
   assert.equal(await p1.locator('#tab-group').getAttribute('aria-selected'), 'true', 'the next step opens everyone');
   assert.equal(await p1.locator('.person-spec').innerText(), 'Prot paladin', 'everyone sees the class and spec');
+  assert.equal(await p1.locator('.person-note').innerText(), 'Fridays I might be late', 'everyone sees the note');
   await p1.click('#tab-mine');
+  // The note can be changed after joining; it saves when the field loses focus.
+  await p1.fill('.my-note textarea', 'Fridays I’m 30 minutes late');
+  await p1.locator('.my-note textarea').blur();
+  await p1.waitForFunction(
+    async (url) => (await (await fetch(url)).json()).people.some((p) => p.note === 'Fridays I’m 30 minutes late'),
+    `${BASE}/api/polls/${pollId}`,
+  );
 
   // US zones go by their region, and the map switches between them.
   assert.match(await p1.locator('.poll-when').innerText(), /in Eastern time/, 'New York reads as Eastern time');

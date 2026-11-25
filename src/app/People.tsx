@@ -58,6 +58,7 @@ export function People({
                 {p.spec && <span className="person-spec">{p.spec}</span>}
                 {marked === 0 && <span className="muted">no times yet</span>}
               </span>
+              {p.note && <p className="person-note">{p.note}</p>}
               <span className="person-actions">
                 <button
                   type="button"

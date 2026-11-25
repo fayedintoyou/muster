@@ -304,12 +304,12 @@ export function PollPage({ id }: { id: string }) {
     }
   };
 
-  const saveSpec = async (spec: string) => {
-    if (!me || spec.trim() === me.spec) return;
+  const saveDetail = async (field: 'spec' | 'note', value: string) => {
+    if (!me || value.trim() === me[field]) return;
     try {
-      const { person } = await api.save(id, me.id, { token: membership.token }, { spec });
+      const { person } = await api.save(id, me.id, { token: membership.token }, { [field]: value });
       mine.current = { id: person.id, updated: person.updated };
-      store.setLastSpec(person.spec);
+      if (field === 'spec') store.setLastSpec(person.spec);
       setState((prev) => prev && { ...prev, people: prev.people.map((p) => (p.id === person.id ? { ...person, marks: p.marks } : p)) });
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : String(err));
@@ -491,8 +491,19 @@ export function PollPage({ id }: { id: string }) {
                     maxLength={LIMITS.spec}
                     placeholder="optional"
                     autoComplete="off"
-                    onBlur={(e) => void saveSpec(e.target.value)}
+                    onBlur={(e) => void saveDetail('spec', e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+                  />
+                </label>
+                <label className="my-note">
+                  <span className="muted">A note for the organizer</span>
+                  <textarea
+                    key={me.note}
+                    defaultValue={me.note}
+                    maxLength={LIMITS.note}
+                    rows={2}
+                    placeholder="optional, like “Fridays I might be 30 minutes late”"
+                    onBlur={(e) => void saveDetail('note', e.target.value)}
                   />
                 </label>
                 {!nothingMarked && (

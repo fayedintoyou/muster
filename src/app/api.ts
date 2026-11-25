@@ -52,7 +52,15 @@ export const api = {
   },
   join(
     id: string,
-    input: { name: string; password?: string; roles?: string[]; spec?: string; marks?: Marks; claim?: boolean },
+    input: {
+      name: string;
+      password?: string;
+      roles?: string[];
+      spec?: string;
+      note?: string;
+      marks?: Marks;
+      claim?: boolean;
+    },
   ) {
     return call<{ person: Person; token: string; state: PollState }>(`/api/polls/${id}/people`, {
       method: 'POST',
@@ -63,7 +71,7 @@ export const api = {
     id: string,
     personId: string,
     auth: { token?: string; admin?: string },
-    input: { marks?: Marks; roles?: string[]; spec?: string; name?: string; password?: string },
+    input: { marks?: Marks; roles?: string[]; spec?: string; note?: string; name?: string; password?: string },
     keepalive = false,
   ) {
     return call<{ person: Person; version: number }>(`/api/polls/${id}/people/${personId}`, {

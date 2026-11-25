@@ -35,6 +35,8 @@ export interface Person {
   roles: string[];
   /** Free text, such as a class and spec. Empty when not given. */
   spec: string;
+  /** Anything they'd like the organizer to know, such as "Fridays I'm 30 minutes late". Empty when not given. */
+  note: string;
   marks: Marks;
   hasPassword: boolean;
   updated: number;
