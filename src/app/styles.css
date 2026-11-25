@@ -804,9 +804,8 @@ button.row-head:hover { color: var(--lamp); }
 }
 .legend-ramp { flex: 0 1 9rem; height: 0.55rem; border-radius: 2px; }
 
-.slot-detail {
-  min-height: 5.5rem;
-  margin-top: 0.9rem;
+.slot-detail { margin-top: 0.9rem; }
+.slot-detail:not(:empty) {
   padding: 0.75rem 0 0;
   border-top: 1px solid var(--line);
   font-size: 0.9375rem;
@@ -878,6 +877,7 @@ button.row-head:hover { color: var(--lamp); }
 .role-n { font-weight: 500; }
 .best-missing { color: var(--muted); font-size: 0.9375rem; margin: 0; }
 .best-item .button { justify-self: start; margin-top: 0.25rem; }
+.best-more { margin-top: 0.75rem; }
 
 /* First-time guidance */
 .first-steps { color: #d7cfc3; margin: 0; }
