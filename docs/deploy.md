@@ -28,16 +28,17 @@ needed one.
 
 ## One-time setup
 
-1. **Make a token.** The room and lineage's token only has *Cloudflare Pages · Edit*, so muster has its
-   own: Cloudflare → My Profile → API Tokens → Create Token → **Edit Cloudflare Workers** template.
-   Account resources: this account. Zone resources: Specific zone → fayelore.com.
-2. **Give GitHub the secrets** (`gh secret set` asks for the value without showing it):
+The secrets are the same Cloudflare token and account ID the room and lineage use, kept in the Mac's
+login Keychain (services `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`). Despite lineage's notes
+calling it Pages-only, the token deploys this Worker too (checked 2026-11-25). Pipe them in without
+showing them:
 
-   ```sh
-   gh secret set CLOUDFLARE_API_TOKEN -R fayedintoyou/muster      # paste the token
-   security find-generic-password -a "$USER" -s CLOUDFLARE_ACCOUNT_ID -w | tr -d '\n' | gh secret set CLOUDFLARE_ACCOUNT_ID -R fayedintoyou/muster
-   gh workflow run deploy.yml -R fayedintoyou/muster --ref main
-   ```
+```sh
+for s in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID; do
+  security find-generic-password -a "$USER" -s $s -w | tr -d '\n' | gh secret set $s -R fayedintoyou/muster
+done
+gh workflow run deploy.yml -R fayedintoyou/muster --ref main
+```
 
 Until both secrets are set, the deploy job is skipped with a warning and the tests still run.
 

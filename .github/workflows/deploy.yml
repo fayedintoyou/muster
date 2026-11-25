@@ -36,9 +36,9 @@ jobs:
           path: e2e/shots/
           retention-days: 7
 
-  # Only main deploys, and only after the tests pass. Needs the repository secrets CLOUDFLARE_API_TOKEN
-  # (Cloudflare's "Edit Cloudflare Workers" template, limited to this account and fayelore.com; see
-  # docs/deploy.md) and CLOUDFLARE_ACCOUNT_ID. Secrets never reach pull requests.
+  # Only main deploys, and only after the tests pass. Needs the repository secrets CLOUDFLARE_API_TOKEN and
+  # CLOUDFLARE_ACCOUNT_ID, the same ones the room and lineage use (docs/deploy.md). Secrets never reach
+  # pull requests.
   deploy:
     needs: test
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
