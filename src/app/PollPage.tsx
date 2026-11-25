@@ -49,8 +49,6 @@ export function PollPage({ id }: { id: string }) {
     return made;
   });
   const [tab, setTab] = useState<Tab | null>(null);
-  /** Someone who hasn't answered yet asked to see everyone's answers first. */
-  const [peek, setPeek] = useState(false);
   // A class just switched to, waiting for its spec before it can save (a class needs one).
   const [classDraft, setClassDraft] = useState<{ cls: string; specs: string[] } | null>(null);
   const [tool, setTool] = useState<Mark>(2);
@@ -433,9 +431,8 @@ export function PollPage({ id }: { id: string }) {
           ))}
         </div>
 
-        {/* Until you've saved your own answer, a wide screen shows only your grid, so nobody tries to mark
-            everyone's (which only shows). */}
-        <div className="panels" data-tab={activeTab} data-answering={(!me && !peek) || undefined}>
+        {/* One view at a time, on every screen: your grid, everyone's, or the best times. */}
+        <div className="panels" data-tab={activeTab}>
           <section className="panel panel-mine" id="panel-mine" role="tabpanel" aria-labelledby="tab-mine">
             <h2 className="panel-heading">Your times</h2>
             {me ? (
@@ -587,20 +584,6 @@ export function PollPage({ id }: { id: string }) {
             )}
           </section>
 
-          {!me && !peek && (
-            <aside className="panel panel-peek">
-              <p>
-                Everyone’s answers and the best nights show up here once you’ve saved yours
-                {answeredCount > 0 ? `. ${plural(answeredCount, 'person has', 'people have')} answered so far.` : '.'}
-              </p>
-              {answeredCount > 0 && (
-                <button type="button" className="text-button" onClick={() => setPeek(true)}>
-                  show them now
-                </button>
-              )}
-            </aside>
-          )}
-
           <section className="panel panel-group" id="panel-group" role="tabpanel" aria-labelledby="tab-group">
             <h2 className="panel-heading">Everyone</h2>
             {counted.length === 0 ? (
@@ -608,7 +591,7 @@ export function PollPage({ id }: { id: string }) {
                 No answers yet. Once people mark their times, this grid lights up wherever they overlap.
               </p>
             ) : (
-              <>
+              <div className="group-main">
               <p className="hint group-hint">Everyone’s answers, just to look at. Tap a window to see who’s free.</p>
               <div className="legend" aria-hidden="true">
                 <span>none free</span>
@@ -624,6 +607,10 @@ export function PollPage({ id }: { id: string }) {
                 onHover={setHovered}
                 outline={highlightPerson?.marks}
               />
+              </div>
+            )}
+            <div className="group-side">
+            {counted.length > 0 && (
               <div className="slot-detail" aria-live="polite">
                 {focusSlot && focusTally ? (
                   <>
@@ -648,9 +635,10 @@ export function PollPage({ id }: { id: string }) {
                       return away.length > 0 ? <p className="muted">not free: {away.map((p) => p.name).join(', ')}</p> : null;
                     })()}
                   </>
-                ) : null}
+                ) : (
+                  <p className="muted slot-detail-idle">Point at a window to see who’s free then.</p>
+                )}
               </div>
-              </>
             )}
             <h3 className="sub-heading">People</h3>
             <Composition people={counted} classes={poll.classes} lead={`Of the ${counted.length}:`} />
@@ -679,6 +667,7 @@ export function PollPage({ id }: { id: string }) {
               canRemove={(pid) => Boolean(membership.admin) || pid === me?.id}
               onRemove={removePerson}
             />
+            </div>
           </section>
 
           <section className="panel panel-best" id="panel-best" role="tabpanel" aria-labelledby="tab-best">

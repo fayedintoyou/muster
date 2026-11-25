@@ -212,14 +212,14 @@ try {
   watch(p2, 'desk');
   await p2.goto(pollUrl);
   await p2.waitForSelector('.paint .cell');
-  // Before answering, a wide screen shows only your own grid: everyone's waits, so nobody tries to mark it.
-  assert.equal(await p2.locator('.panel-group').isVisible(), false, 'everyone’s grid waits until you’ve answered');
+  // One view at a time on a wide screen too: your grid first, everyone's behind its own tab.
+  assert.equal(await p2.locator('.panel-group').isVisible(), false, 'everyone’s grid is its own view');
   assert.equal(await p2.locator('.panel-best').isVisible(), false, 'and best times too');
-  assert.match(await p2.locator('.panel-peek').innerText(), /1 person has answered so far/);
   await shot(p2, '04a-desk-before-answering', false);
-  await p2.click('.panel-peek button:text("show them now")');
-  assert.ok(await p2.locator('.panel-group .heat .cell').first().isVisible(), 'but you can look first if you ask');
-  assert.equal(await p2.locator('.panel-peek').count(), 0);
+  await p2.click('.tabs button:text("everyone (1)")');
+  assert.ok(await p2.locator('.panel-group .heat .cell').first().isVisible(), 'you can look at everyone’s first');
+  assert.equal(await p2.locator('.panel-mine').isVisible(), false, 'without your own grid beside it');
+  await p2.click('.tabs button:text("mark your times")');
   const rowLabel = await p2.locator('.paint .row-head').first().innerText();
   assert.match(rowLabel, /^02:00/, `Berlin sees the 8pm ET start as 02:00 (got ${rowLabel})`);
   assert.match(await p2.locator('.topbar .zone-current').innerText(), /^Berlin/, 'zones outside the US keep their city');
@@ -282,6 +282,9 @@ try {
   await p2.locator('.heat .cell[data-key="w4/1290"]').hover();
   await p2.waitForSelector('.slot-detail-head');
   await shot(p2, '04-desk-berlin');
+  await p2.click('.tabs button:text("best times")');
+  await shot(p2, '04b-desk-best');
+  await p2.click('.tabs button:text("everyone")');
 
   // ---- Back on the phone: everyone, then best times ----
   await p1.reload();
