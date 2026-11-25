@@ -609,10 +609,7 @@ export function PollPage({ id }: { id: string }) {
               </p>
             ) : (
               <>
-              <p className="hint group-hint">
-                Everyone’s answers together, to look at rather than mark. The brighter a window, the more people are
-                free. Tap one to see who.
-              </p>
+              <p className="hint group-hint">Everyone’s answers, just to look at. Tap a window to see who’s free.</p>
               <div className="legend" aria-hidden="true">
                 <span>none free</span>
                 <span className="legend-ramp" style={{ background: GLOW_GRADIENT }} />
@@ -651,11 +648,7 @@ export function PollPage({ id }: { id: string }) {
                       return away.length > 0 ? <p className="muted">not free: {away.map((p) => p.name).join(', ')}</p> : null;
                     })()}
                   </>
-                ) : (
-                  <p className="muted">
-                    Tap a window to see who’s free then.
-                  </p>
-                )}
+                ) : null}
               </div>
               </>
             )}

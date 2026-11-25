@@ -355,6 +355,28 @@ try {
   await p4.waitForSelector('.save-state.saved');
   const denseMarks = await p4.$$eval('.paint .cell[data-mark="2"]', (els) => els.length);
   assert.equal(denseMarks, 5 * 8, 'dense drag filled five nights of two hours');
+
+  // Nights with the same hours and the same people make one best-times entry, copied as one line a night.
+  const sameNights = {};
+  for (const d of [1, 2, 3, 4, 5]) for (let m = 1200; m < 1320; m += 15) sameNights[`w${d}/${m}`] = 2;
+  await fetch(`${BASE}/api/polls/${dense.id}/people`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name: 'Bo', cls: 'mage', specs: ['frost'], marks: sameNights }),
+  });
+  await p4.reload();
+  await p4.waitForSelector('.tabs');
+  await p4.click('.tabs button:text("best times")');
+  await p4.waitForSelector('.best-item');
+  const grouped = p4.locator('.best-item').first();
+  assert.match(await grouped.locator('h3').innerText(), /^Mon, Tue, Wed, Thu and Fri, /, 'the five same nights are one entry');
+  assert.equal(await p4.locator('.best-item').count(), 1, 'and the only one');
+  assert.equal(await grouped.locator('.best-classes').count(), 0, 'with everyone there, no repeat of the class list');
+  await grouped.locator('button:text("copy for discord")').click();
+  const nightsClip = await p4.evaluate(() => navigator.clipboard.readText());
+  assert.equal(nightsClip.split('\n').length, 5, `one discord line a night (got ${nightsClip})`);
+  await shot(p4, '09b-grouped-best-phone');
+  await p4.click('.tabs button:text("your times")');
   await shot(p4, '09-dense-phone');
 
   // Holding a drag at the bottom edge scrolls the page and keeps painting.
