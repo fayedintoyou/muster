@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import type { Grid } from '../core/grid';
 import type { Candidate } from '../core/best';
 import type { Seating } from '../core/seating';
+import type { Raid } from '../core/raid';
 import type { Person, Poll } from '../core/types';
 import { bestWindows } from '../core/best';
 import { formatDate, formatDuration, formatRange, formatTime, plural, serverTime, weekdayName } from '../core/format';
@@ -29,6 +30,8 @@ export function BestTimes({
   onLength,
   nameOf,
   zone,
+  raid,
+  onLock,
 }: {
   poll: Poll;
   grid: Grid;
@@ -39,9 +42,14 @@ export function BestTimes({
   onLength: (minutes: number) => void;
   nameOf: (id: string) => string;
   zone: string;
+  /** The raid already locked in, if any. */
+  raid?: Raid | null;
+  /** For the poll's maker: lock in a window as the raid. */
+  onLock?: (start: string, minutes: number) => Promise<void>;
 }) {
   const [copied, copy] = useCopied();
   const [showAll, setShowAll] = useState(false);
+  const [lockError, setLockError] = useState('');
   const answered = people.filter((p) => Object.keys(p.marks).length > 0);
   const result = useMemo(
     () =>
@@ -199,10 +207,39 @@ export function BestTimes({
                       {copied === id ? 'copied: paste it in discord' : 'copy for discord'}
                     </button>
                   )}
+                  {onLock && (
+                    <div className="best-lock">
+                      {g.list.length > 1 && <span className="muted">lock in</span>}
+                      {g.list.map((x) => {
+                        const start = grid.columns[x.col].slots[x.first].key;
+                        const minutes = x.span * poll.slot;
+                        const locked = raid?.start === start && raid.minutes === minutes;
+                        return (
+                          <button
+                            type="button"
+                            key={start}
+                            className="button small primary"
+                            disabled={locked}
+                            onClick={() => {
+                              setLockError('');
+                              onLock(start, minutes).catch((err) => setLockError(err instanceof Error ? err.message : String(err)));
+                            }}
+                          >
+                            {locked ? 'locked in' : g.list.length > 1 ? dayName(x, 'short') : 'lock in this time'}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </li>
               );
             })}
           </ol>
+          {lockError && (
+            <p className="error" role="alert">
+              {lockError}
+            </p>
+          )}
           {groups.length > SHOWN && (
             <button type="button" className="text-button best-more" onClick={() => setShowAll((s) => !s)}>
               {showAll ? 'show fewer' : `${groups.length - SHOWN} more`}

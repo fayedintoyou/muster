@@ -87,6 +87,20 @@ async function api(request: Request, env: Env, url: URL): Promise<Response> {
     return error(405, 'Method not allowed.');
   }
 
+  if (parts[3] === 'raid' && parts.length === 4) {
+    if (method === 'PUT') {
+      const body = await readJson(request);
+      if (body instanceof Response) return body;
+      const result = await poll.lockRaid(auth(request).admin, body);
+      return result.ok ? json(result.state) : fromFailure(result);
+    }
+    if (method === 'DELETE') {
+      const result = await poll.unlockRaid(auth(request).admin);
+      return result.ok ? json(result.state) : fromFailure(result);
+    }
+    return error(405, 'Method not allowed.');
+  }
+
   if (parts[3] !== 'people') return error(404, 'Not found.');
 
   if (parts.length === 4) {

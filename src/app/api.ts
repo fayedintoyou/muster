@@ -1,4 +1,5 @@
 import type { Marks, Person, PollSettings, PollState } from '../core/types';
+import type { Raid } from '../core/raid';
 
 export class ApiError extends Error {
   constructor(
@@ -46,6 +47,12 @@ export const api = {
   },
   update(id: string, admin: string, patch: Partial<PollSettings>) {
     return call<PollState>(`/api/polls/${id}`, { method: 'PATCH', admin, body: JSON.stringify(patch) });
+  },
+  lockRaid(id: string, admin: string, raid: Pick<Raid, 'start' | 'minutes' | 'skips'>) {
+    return call<PollState>(`/api/polls/${id}/raid`, { method: 'PUT', admin, body: JSON.stringify(raid) });
+  },
+  unlockRaid(id: string, admin: string) {
+    return call<PollState>(`/api/polls/${id}/raid`, { method: 'DELETE', admin });
   },
   destroy(id: string, admin: string) {
     return call<{ ok: true }>(`/api/polls/${id}`, { method: 'DELETE', admin });

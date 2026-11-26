@@ -1,3 +1,5 @@
+import type { Raid } from './raid';
+
 export type Mode = 'weekly' | 'dates';
 export type SlotSize = 15 | 30 | 60;
 
@@ -57,5 +59,7 @@ export interface Person {
 export interface PollState {
   poll: Poll;
   people: Person[];
+  /** The raid locked in from best times, or null while the poll is still finding one. */
+  raid: Raid | null;
   version: number;
 }

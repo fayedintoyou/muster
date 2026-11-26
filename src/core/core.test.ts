@@ -7,6 +7,7 @@ import { localTime, tzOffset, windowLength, zonedInstant } from './time';
 import { formatMinute, formatRange, serverTime } from './format';
 import { cleanMarks, validateSettings } from './validate';
 import { seat } from './seating';
+import { raidCalendar, raidNights, validateRaid } from './raid';
 import type { Person, PollSettings } from './types';
 
 const NY = 'America/New_York';
@@ -184,6 +185,43 @@ describe('seating', () => {
     const r = bestWindows(grid, { length: 60, people, raid: { size: 2, makeup: { tank: 1, healer: 1 } } });
     expect(grid.columns[r.candidates[0].col].day).toBe('w4');
     expect(r.candidates[0].seating?.seated.length).toBe(2);
+  });
+});
+
+describe('a locked-in raid', () => {
+  // Tuesdays and Thursdays 8pm–1am New York; now is Wednesday 25 November, 00:37.
+  const raid = { start: 'w4/1200', minutes: 180, skips: ['2026-12-03'], version: 2 };
+
+  it('only locks in a time the poll has', () => {
+    expect(validateRaid({ start: 'w4/1200', minutes: 180 }, weekly).ok).toBe(true);
+    expect(validateRaid({ start: 'w3/1200', minutes: 180 }, weekly).ok).toBe(false);
+    expect(validateRaid({ start: 'w4/1200', minutes: 7 }, weekly).ok).toBe(false);
+  });
+
+  it('lists the coming nights, with called-off ones marked', () => {
+    const nights = raidNights(weekly, raid, NOW, 3);
+    expect(nights.map((n) => [n.night, n.off])).toEqual([
+      ['2026-11-26', false],
+      ['2026-12-03', true],
+      ['2026-12-10', false],
+    ]);
+    expect(localTime(nights[0].start, NY).minutes).toBe(20 * 60);
+  });
+
+  it('keeps a raid that runs past midnight on its night, and counts one under way', () => {
+    // Tuesday night's 12:30am raid started seven minutes ago.
+    const late = raidNights(weekly, { ...raid, start: 'w2/1470', skips: [] }, NOW, 1)[0];
+    expect(late.night).toBe('2026-11-24');
+    expect(localTime(late.start, NY)).toMatchObject({ d: 25, minutes: 30 });
+  });
+
+  it('writes a weekly calendar in the poll’s zone, leaving out nights called off', () => {
+    const ics = raidCalendar({ id: 'abcdefgh', title: 'Raid nights', mode: 'weekly', tz: NY }, raid, 'https://x/e/abcdefgh', NOW);
+    expect(ics).toContain('DTSTART;TZID=America/New_York:20261126T200000');
+    expect(ics).toContain('RRULE:FREQ=WEEKLY');
+    expect(ics).toContain('EXDATE;TZID=America/New_York:20261203T200000');
+    expect(ics).toContain('SEQUENCE:2');
+    expect(ics).toContain('DURATION:PT180M');
   });
 });
 
