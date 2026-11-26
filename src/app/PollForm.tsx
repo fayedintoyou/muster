@@ -5,6 +5,7 @@ import { WEEK_ORDER, slotKeys } from '../core/slots';
 import { REALM_TIME, ROLES, WOW_CLASSES } from '../core/classes';
 import { formatDuration, formatMinute, weekdayName } from '../core/format';
 import { today, windowLength } from '../core/time';
+import { RAID_SIZES, seatsFor, usualMakeup } from '../core/seating';
 import { DatePicker } from './DatePicker';
 import { classStyle } from './ClassPicker';
 import { ClassIcon } from './icons';
@@ -24,6 +25,8 @@ export const DEFAULT_SETTINGS: PollSettings = {
   roles: ['tank', 'healer', 'dps'],
   classes: [...WOW_CLASSES],
   length: 180,
+  size: 0,
+  makeup: {},
 };
 
 const LENGTHS = Array.from({ length: 16 }, (_, i) => (i + 1) * 30);
@@ -62,6 +65,9 @@ export function PollForm({
   // The usual choices, plus any a poll already had that aren't among them.
   const classOptions = useMemo(() => [...new Set([...DEFAULT_SETTINGS.classes, ...initial.classes])], [initial.classes]);
   const [length, setLength] = useState(initial.length);
+  const [size, setSize] = useState(initial.size);
+  const [makeup, setMakeup] = useState(initial.makeup);
+  const seats = seatsFor(size, makeup);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -79,6 +85,8 @@ export function PollForm({
     roles: [...ROLES],
     classes: classOptions.filter((c) => classes.includes(c)),
     length,
+    size,
+    makeup: size ? makeup : {},
   };
 
   const times = useMemo(() => Array.from({ length: 1440 / slot }, (_, i) => i * slot), [slot]);
@@ -204,7 +212,7 @@ export function PollForm({
 
 
       <fieldset className="field">
-        <legend>How long is a raid?</legend>
+        <legend>How long is a raid, and how big?</legend>
         <div className="time-row">
           <label className="select">
             <span className="visually-hidden">Raid length</span>
@@ -217,6 +225,48 @@ export function PollForm({
             </select>
           </label>
         </div>
+        <div className="segmented" role="radiogroup" aria-label="Raid size">
+          {[0, ...RAID_SIZES].map((n) => (
+            <button
+              type="button"
+              role="radio"
+              key={n}
+              aria-checked={size === n}
+              onClick={() => {
+                setSize(n);
+                setMakeup(usualMakeup(n));
+              }}
+            >
+              {n ? `${n} players` : 'any size'}
+            </button>
+          ))}
+        </div>
+        {size > 0 && (
+          <div className="makeup">
+            {(['tank', 'healer'] as const).map((role) => (
+              <label key={role} className="select">
+                <select
+                  aria-label={role === 'tank' ? 'Tanks' : 'Healers'}
+                  value={makeup[role] ?? 0}
+                  onChange={(e) => setMakeup((m) => ({ ...m, [role]: Number(e.target.value) }))}
+                >
+                  {Array.from({ length: size + 1 }, (_, n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+                <span>{role === 'tank' ? 'tanks' : 'healers'}</span>
+              </label>
+            ))}
+            <span className="makeup-rest">{seats.dps} dps</span>
+          </div>
+        )}
+        <p className="hint">
+          {size
+            ? `Best times seats each person once, in a role they play, and shows what a ${size} still needs.`
+            : 'Pick a size to see which nights fill a raid.'}
+        </p>
       </fieldset>
 
       <details className="field more" open={editing || undefined}>

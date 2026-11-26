@@ -846,6 +846,7 @@ button.row-head:hover { color: var(--lamp); }
   line-height: 1.2;
 }
 .best-flex { color: var(--muted); font-size: 0.875rem; margin: 0.15rem 0 0; }
+.best-seating { color: var(--muted); font-size: 0.9375rem; margin: 0; }
 .best-server { color: var(--muted); font-family: var(--mono); font-size: 0.75rem; margin: 0.2rem 0 0; }
 .best-count { display: flex; align-items: baseline; gap: 0.6rem; margin: 0; }
 .count {
@@ -911,3 +912,8 @@ button.row-head:hover { color: var(--lamp); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+.makeup { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; margin-top: 0.75rem; }
+.makeup .select { display: inline-flex; align-items: center; gap: 0.5rem; }
+.makeup-rest { color: var(--muted); }
+.time-row + .segmented { margin-top: 0.75rem; }

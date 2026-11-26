@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
 import type { Grid } from '../core/grid';
 import type { Candidate } from '../core/best';
+import type { Seating } from '../core/seating';
 import type { Person, Poll } from '../core/types';
 import { bestWindows } from '../core/best';
-import { formatDate, formatDuration, formatRange, formatTime, serverTime, weekdayName } from '../core/format';
+import { formatDate, formatDuration, formatRange, formatTime, plural, serverTime, weekdayName } from '../core/format';
 import { MINUTE } from '../core/time';
 import { discordTimestamps, nextOccurrence } from '../core/occurrence';
 import { useCopied } from './copy';
@@ -43,8 +44,16 @@ export function BestTimes({
   const [showAll, setShowAll] = useState(false);
   const answered = people.filter((p) => Object.keys(p.marks).length > 0);
   const result = useMemo(
-    () => bestWindows(grid, { length, people, required, roles: poll.roles, limit: 14 }),
-    [grid, length, people, required, poll.roles],
+    () =>
+      bestWindows(grid, {
+        length,
+        people,
+        required,
+        roles: poll.roles,
+        limit: 14,
+        raid: poll.size ? { size: poll.size, makeup: poll.makeup } : undefined,
+      }),
+    [grid, length, people, required, poll.roles, poll.size, poll.makeup],
   );
   const lengths = LENGTHS.includes(length) ? LENGTHS : [...LENGTHS, length].sort((a, b) => a - b);
   const total = people.length;
@@ -131,24 +140,30 @@ export function BestTimes({
                       <p className="best-flex">or start as late as {formatTime(last.instant, zone)} with the same people</p>
                     )}
                   </div>
-                  <p className="best-count">
-                    <span className="count">
-                      {c.attend.length}
-                      <span className="of">/{total}</span>
-                    </span>
-                    <span className="count-words">
-                      {c.attend.length === total ? 'everyone can make it' : 'can make it'}
-                      {maybe > 0 && `, ${maybe} only if needed`}
-                    </span>
-                  </p>
-                  {roleEntries.length > 0 && (
-                    <ul className="roles-count" aria-label="Roles">
-                      {roleEntries.map(([role, n]) => (
-                        <li key={role} data-none={n === 0 || undefined}>
-                          <span className="role-n">{n}</span> {role}
-                        </li>
-                      ))}
-                    </ul>
+                  {c.seating ? (
+                    <Seats seating={c.seating} nameOf={nameOf} />
+                  ) : (
+                    <>
+                      <p className="best-count">
+                        <span className="count">
+                          {c.attend.length}
+                          <span className="of">/{total}</span>
+                        </span>
+                        <span className="count-words">
+                          {c.attend.length === total ? 'everyone can make it' : 'can make it'}
+                          {maybe > 0 && `, ${maybe} only if needed`}
+                        </span>
+                      </p>
+                      {roleEntries.length > 0 && (
+                        <ul className="roles-count" aria-label="Roles">
+                          {roleEntries.map(([role, n]) => (
+                            <li key={role} data-none={n === 0 || undefined}>
+                              <span className="role-n">{n}</span> {role}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </>
                   )}
                   {/* With everyone there, the classes are the same as the People list's. */}
                   {c.attend.length < total && (
@@ -196,5 +211,50 @@ export function BestTimes({
         </>
       )}
     </div>
+  );
+}
+
+/** How full a raid this window seats, what it still needs, and who the lineup counts on. */
+function Seats({ seating, nameOf }: { seating: Seating; nameOf: (id: string) => string }) {
+  const short = Object.entries(seating.want)
+    .map(([role, n]) => [role, n - (seating.filled[role] ?? 0)] as const)
+    .filter(([, n]) => n > 0);
+  const counting = [
+    ...seating.flex.map((s) => `${nameOf(s.id)} as ${s.role}`),
+    ...seating.ifNeeded.map((id) => `${nameOf(id)} only if needed`),
+  ];
+  return (
+    <>
+      <p className="best-count">
+        <span className="count">
+          {seating.seated.length}
+          <span className="of">/{seating.size}</span>
+        </span>
+        <span className="count-words">
+          {short.length === 0
+            ? `fills the ${seating.size}`
+            : `seated, needs ${short.map(([role, n]) => (role === 'dps' ? `${n} dps` : plural(n, role))).join(', ')}`}
+        </span>
+      </p>
+      <ul className="roles-count" aria-label="Seats">
+        {Object.entries(seating.want)
+          .filter(([, n]) => n > 0)
+          .map(([role, n]) => (
+            <li key={role} data-none={(seating.filled[role] ?? 0) < n || undefined}>
+              <span className="role-n">
+                {seating.filled[role] ?? 0}/{n}
+              </span>{' '}
+              {role}
+            </li>
+          ))}
+      </ul>
+      {(counting.length > 0 || seating.extra.length > 0) && (
+        <p className="best-seating">
+          {counting.length > 0 && `Counting ${counting.join(', ')}.`}
+          {counting.length > 0 && seating.extra.length > 0 && ' '}
+          {seating.extra.length > 0 && `${plural(seating.extra.length, 'more is', 'more are')} free beyond the seats.`}
+        </p>
+      )}
+    </>
   );
 }

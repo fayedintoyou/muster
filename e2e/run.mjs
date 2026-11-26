@@ -384,6 +384,41 @@ try {
   assert.equal(nightsClip.split('\n').length, 5, `one discord line a night (got ${nightsClip})`);
   await shot(p4, '09b-grouped-best-phone');
   await p4.click('.tabs button:text("your times")');
+
+  // ---- A raid of 10: everyone takes one seat, in a role they play ----
+  const ten = await fetch(`${BASE}/api/polls`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      title: 'Barrow Deeps', notes: '', mode: 'weekly', days: ['w3'], start: 20 * 60, end: 23 * 60, slot: 30,
+      tz: 'America/Chicago', roles: ['tank', 'healer', 'dps'], classes: ['warrior', 'paladin', 'priest', 'mage'], length: 180, size: 10, makeup: { tank: 2, healer: 3 },
+    }),
+  }).then((r) => r.json());
+  const wed = (mark) => Object.fromEntries([1200, 1230, 1260, 1290, 1320, 1350].map((m) => [`w3/${m}`, mark]));
+  for (const [name, cls, specs, mark] of [
+    ['Ana', 'warrior', ['protection'], 2],
+    ['Ben', 'paladin', ['protection', 'retribution'], 2],
+    ['Cat', 'priest', ['holy'], 2],
+    ['Dan', 'mage', ['frost'], 1],
+  ]) {
+    await fetch(`${BASE}/api/polls/${ten.id}/people`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name, cls, specs, marks: wed(mark) }),
+    });
+  }
+  const p6 = await phone.newPage();
+  watch(p6, 'phone-seats');
+  await p6.goto(`${BASE}/e/${ten.id}`);
+  await p6.waitForSelector('.tabs');
+  await p6.click('.tabs button:text("best times")');
+  await p6.waitForSelector('.best-item');
+  const seated = p6.locator('.best-item').first();
+  assert.match(await seated.locator('.best-count').innerText(), /4\s*\/10\s*seated, needs 2 healers, 4 dps/, 'a window says what the 10 still needs');
+  assert.match(await seated.locator('.roles-count').innerText(), /2\/2\s*tank\s+1\/3\s*healer\s+1\/5\s*dps/, 'seat by seat');
+  assert.equal(await seated.locator('.best-seating').innerText(), 'Counting Ben as tank, Dan only if needed.', 'and who the lineup counts on');
+  await shot(p6, '09c-seats-phone');
+  await p6.close();
   await shot(p4, '09-dense-phone');
 
   // Holding a drag at the bottom edge scrolls the page and keeps painting.
@@ -414,6 +449,8 @@ try {
   await p5.click('.segmented button:text("specific dates")');
   await p5.click('button[aria-label="Next month"]');
   for (const d of ['1', '2', '3', '8', '9']) await p5.click(`.calendar-day:text-is("${d}")`);
+  await p5.click('.segmented[aria-label="Raid size"] button:text("10 players")');
+  assert.equal(await p5.locator('.makeup-rest').innerText(), '5 dps', 'a 10 starts as 2 tanks, 3 healers and 5 dps');
   await shot(p5, '10-dates-form-desk');
   await p5.click('button:text("make the poll")');
   await p5.waitForURL(/\/e\/[a-z0-9]{8}$/);

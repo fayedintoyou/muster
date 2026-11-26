@@ -6,6 +6,7 @@ import { slotKeys } from './slots';
 import { localTime, tzOffset, windowLength, zonedInstant } from './time';
 import { formatMinute, formatRange, serverTime } from './format';
 import { cleanMarks, validateSettings } from './validate';
+import { seat } from './seating';
 import type { Person, PollSettings } from './types';
 
 const NY = 'America/New_York';
@@ -19,6 +20,8 @@ const weekly: PollSettings = {
   slot: 30,
   tz: NY,
   realm: '',
+  size: 0,
+  makeup: {},
   roles: ['tank', 'healer', 'dps'],
   classes: [],
   length: 90,
@@ -146,6 +149,44 @@ describe('best windows', () => {
   });
 });
 
+describe('seating', () => {
+  const p = (id: string, roles: string[]) => person(id, {}, roles);
+  it('seats each person once, moving a flexible one to make room', () => {
+    const s = seat([p('ben', ['tank', 'dps']), p('ana', ['dps'])], new Set(['ben', 'ana']), 2, { tank: 1, healer: 0 });
+    expect(s.seated).toEqual([{ id: 'ben', role: 'tank' }, { id: 'ana', role: 'dps' }]);
+    expect(s.flex).toEqual([{ id: 'ben', role: 'tank' }]);
+  });
+
+  it('seats the sure before the if-needed, and says who is left over', () => {
+    const s = seat([p('maybe', ['healer']), p('sure', ['healer'])], new Set(['sure']), 2, { tank: 0, healer: 1 });
+    expect(s.seated).toEqual([{ id: 'sure', role: 'healer' }]);
+    expect(s.extra).toEqual(['maybe']);
+    expect(s.filled).toEqual({ tank: 0, healer: 1, dps: 0 });
+  });
+
+  it('counts a seat taken only if needed', () => {
+    const s = seat([p('cy', ['dps'])], new Set(), 10, { tank: 2, healer: 3 });
+    expect(s.ifNeeded).toEqual(['cy']);
+    expect(s.want).toEqual({ tank: 2, healer: 3, dps: 5 });
+  });
+
+  it('ranks windows by how full a raid they seat', () => {
+    const grid = buildGrid({ ...weekly, days: ['w2', 'w4'], start: 20 * 60, end: 21 * 60 }, NY);
+    const tue = { 'w2/1200': 2, 'w2/1230': 2 } as const;
+    const thu = { 'w4/1200': 2, 'w4/1230': 2 } as const;
+    const people = [
+      person('d1', tue, ['dps']),
+      person('d2', tue, ['dps']),
+      person('d3', tue, ['dps']),
+      person('tank', thu, ['tank']),
+      person('heal', thu, ['healer']),
+    ];
+    const r = bestWindows(grid, { length: 60, people, raid: { size: 2, makeup: { tank: 1, healer: 1 } } });
+    expect(grid.columns[r.candidates[0].col].day).toBe('w4');
+    expect(r.candidates[0].seating?.seated.length).toBe(2);
+  });
+});
+
 describe('occurrences', () => {
   it('finds the next Tuesday for a weekly slot, after midnight included', () => {
     expect(new Date(nextOccurrence(weekly, 'w2/1200', NOW)!).toISOString()).toBe('2026-12-02T01:00:00.000Z');
@@ -182,6 +223,15 @@ describe('validation', () => {
   it('accepts a weekly poll and orders its days Monday first', () => {
     const r = validateSettings({ ...weekly, days: ['w0', 'w4', 'w2'] }, NOW);
     expect(r.ok && r.value.days).toEqual(['w2', 'w4', 'w0']);
+  });
+
+  it('checks a raid size and its tanks and healers', () => {
+    const r = validateSettings({ ...weekly, size: 10, makeup: { tank: 2, healer: 3 } }, NOW);
+    expect(r.ok && r.value.makeup).toEqual({ tank: 2, healer: 3 });
+    expect(validateSettings({ ...weekly, size: 10, makeup: { tank: 6, healer: 6 } }, NOW).ok).toBe(false);
+    expect(validateSettings({ ...weekly, size: 41, makeup: {} }, NOW).ok).toBe(false);
+    const any = validateSettings({ ...weekly, size: 0, makeup: { tank: 2 } }, NOW);
+    expect(any.ok && any.value.makeup).toEqual({});
   });
 
   it('keeps a server time zone, and treats a missing one as none', () => {

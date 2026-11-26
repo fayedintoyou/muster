@@ -1,3 +1,4 @@
+import { type Seating, seat } from './seating';
 import type { Grid } from './grid';
 import type { Person } from './types';
 
@@ -39,6 +40,8 @@ export interface Candidate {
   partly: { id: string; slots: number }[];
   missing: string[];
   roles: Record<string, number>;
+  /** With a raid size: who takes which seat. */
+  seating?: Seating;
 }
 
 export interface BestOptions {
@@ -50,6 +53,8 @@ export interface BestOptions {
   roles?: string[];
   /** How many windows to return. */
   limit?: number;
+  /** The raid's size and its tanks and healers: windows are then ranked by how full a raid they seat. */
+  raid?: { size: number; makeup: Record<string, number> };
 }
 
 export interface BestResult {
@@ -60,6 +65,17 @@ export interface BestResult {
   /** Required people never overlap for the whole window. */
   requiredUnmet: boolean;
 }
+
+// With a raid size, the most seats filled comes first, then the fewest of them only if needed.
+const seatedSure = (c: Candidate) => (c.seating ? c.seating.seated.length - c.seating.ifNeeded.length : 0);
+const better = (a: Candidate, b: Candidate) =>
+  (b.seating?.seated.length ?? 0) - (a.seating?.seated.length ?? 0) ||
+  seatedSure(b) - seatedSure(a) ||
+  b.attend.length - a.attend.length ||
+  b.yes.length - a.yes.length ||
+  b.last - b.first - (a.last - a.first) ||
+  a.col - b.col ||
+  a.first - b.first;
 
 export function bestWindows(grid: Grid, opts: BestOptions): BestResult {
   const limit = opts.limit ?? 5;
@@ -129,20 +145,21 @@ export function bestWindows(grid: Grid, opts: BestOptions): BestResult {
         if (!attend.includes(p.id)) continue;
         for (const role of p.roles) if (role in roles) roles[role]++;
       }
-      run = { col, first: i, last: i, span, attend, yes, partly, missing, roles };
+      const seating = opts.raid
+        ? seat(
+            opts.people.filter((p) => attend.includes(p.id)),
+            new Set(yes),
+            opts.raid.size,
+            opts.raid.makeup,
+          )
+        : undefined;
+      run = { col, first: i, last: i, span, attend, yes, partly, missing, roles, seating };
       runSignature = signature;
     }
     close();
   });
 
-  all.sort(
-    (a, b) =>
-      b.attend.length - a.attend.length ||
-      b.yes.length - a.yes.length ||
-      b.last - b.first - (a.last - a.first) ||
-      a.col - b.col ||
-      a.first - b.first,
-  );
+  all.sort(better);
 
   // The best window of each night first, so the list offers different nights; then more windows,
   // apart from those already chosen, if there are fewer nights than places.
@@ -162,14 +179,7 @@ export function bestWindows(grid: Grid, opts: BestOptions): BestResult {
     );
     if (!clashes) picked.push(c);
   }
-  picked.sort(
-    (a, b) =>
-      b.attend.length - a.attend.length ||
-      b.yes.length - a.yes.length ||
-      b.last - b.first - (a.last - a.first) ||
-      a.col - b.col ||
-      a.first - b.first,
-  );
+  picked.sort(better);
 
   return {
     candidates: picked,
