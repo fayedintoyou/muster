@@ -1,179 +1,176 @@
-# Where muster could go
+# Where muster is going
 
-Ideas, not commitments. Nothing here is built unless it says so. Written on November 26, 2026,
-13 days before WoW Forever's raids open on December 9.
+The goal: **replace Raid-Helper for Faye's guild**, starting with WoW Forever, whose raids open on
+December 9, 2026. Updated on November 26, 2026, after reviews by GPT-6.2 Astra and Claude, and after
+Faye's answers:
+- the guild used Raid-Helper;
+- the realm runs on Central time;
+- the goal is to replace Raid-Helper, not sit in front of it.
 
-## The idea in one line
+Ideas, not commitments, unless marked done.
 
-Raid sign-up bots begin once someone has already picked "Thursday 8pm". Muster finds the Thursday.
-Grown up, it covers the whole loop:
+## Why muster can win
 
-**find the time → lock it in → weekly sign-ups → notice the drift → find a new time**
+Raid-Helper starts once an officer has already picked "Thursday 8pm", and from then on everyone signs
+up again every week. Muster starts earlier and asks less of people:
 
-The usual Discord tools cover only the middle of that loop. Nothing helps a guild choose its nights,
-or notices when those nights stop working.
+**find the time → lock it in → one-tap weekly sign-ups → notice the drift → find a new time**
+
+- **People answer once.** Muster already knows each person's class, specs and usual hours, so a weekly
+  sign-up is one tap: no rows of emoji, no picking your spec again.
+- **It finds the night.** A new tier or a lost healer means "when can we raid now?", and Raid-Helper
+  can't answer that.
+- **It seats the raid honestly.** Each person takes one seat in a role they play, so "fills the 10"
+  means a raid that can actually pull. Done (PR #14).
+- **No paywall, and no confusing permissions to set up.**
 
 ## Principles
 
-- **Planning happens on the web; Discord is for reaching people.** Grids, rosters and groups need
-  room, and Discord messages are cramped. Discord gets short posts with buttons, and every post links
-  to the page.
-- **Availability comes before sign-ups.** Every new feature should use what people already marked,
-  rather than ask them again.
-- **Ask people as little as possible.** One poll, then a tap a week. No forms to fill in again.
-- **Gentle with people.** Muster shows who is free, not who is unreliable. Nothing shames anyone in
-  public.
-- **The same calm look.** One view at a time, no dashboards of everything at once (see PR #10).
+- **Routine actions happen in Discord; planning happens on the web.** Signing up, changing your mind
+  and seeing who's coming take one tap on the raid's post. Grids, rosters and groups live on the page,
+  and every post links to it.
+- **Being free, signing up and turning up are three different facts.** Muster keeps them apart: "usually
+  free" comes from the poll, signing up is a tap for each raid, and attendance is recorded afterwards.
+- **Ask people as little as possible.** Fill everything from what they've already said.
+- **Gentle with people.** Lists of who hasn't answered and attendance are for officers only. Nobody is
+  ranked or shamed in public.
+- **The same calm look.** One view at a time (PR #10).
 
-## 1. Additions to what exists now
+## Done
 
-These sit on top of today's polls and need no Discord.
+- **The December 9 countdown** on the home page (PR #11).
+- **Server time beside every time**, Central by default (PR #13).
+- **Raid size and honest seating** (PR #14). A poll can be for 10, 20 or 40, with tanks and healers.
+  Best times seats each person once, puts people who are sure before "if needed" ones, and says what a
+  window still needs and who the lineup counts on.
 
-**Who hasn't answered.** The organizer pastes the guild's names once. Everyone view lists who still
-hasn't answered, and a button copies a Discord message with their @names. Names are matched loosely,
-and anyone the list misses can be matched by hand. Discord sign-in (section 3) later fills the list
-on its own.
+## Matching Raid-Helper: what the guild relies on
 
-**What a time still needs.** Best times says "needs 1 more tank", not just "0 tank". The poll knows
-the raid it's for. Barrow Deeps is 10 players, Hyjal 20 and Onyxia 40, and each size has a usual
-make-up the organizer can change (for example 2 tanks, 5 healers and 13 dps for 20). Each window then
-reads "fills a 20: 18 of 20, needs 1 tank, 1 healer".
+These are what has to work before the guild can stop using Raid-Helper.
 
-**Raid size in best times.** A window that fills a 10 is worth showing even when it can't fill a 40.
-With a size set, best times ranks the windows that fill it first, then those nearest to filling it.
+1. **A raid post in Discord.** The bot posts the raid with its date, the times in Discord timestamps and
+   server time, the roster so far, and buttons: **in**, **late**, **tentative**, **out**. It's one card,
+   which the bot edits as people sign up, so the channel isn't flooded with new posts.
+2. **Signing up in one tap.** "In" uses the class and spec muster already knows. "Change spec" and
+   "on my alt" are there for anyone who needs them. "Late" asks for an arrival time.
+3. **The roster**, on the post and on the page: seated by role and class, with standby, as in PR #14.
+   The officer can move people between seated and standby, and the bot tells the people affected.
+4. **Recurring raids.** Locking in "Thursdays 8–11pm server time" posts each week's raid on its own, a
+   set number of days ahead.
+5. **Reminders.** One reminder before the raid to those signed in, and one to people in the raid pool
+   who haven't answered for the week. Each guild turns them on and chooses where they go.
+6. **Moving or cancelling a raid** edits its post, tells everyone who signed up, and updates their
+   calendars.
+7. **Officers.** Discord roles decide who can post, edit and move people. Until then, the private link
+   to change a poll works as it does now.
+8. **Groups for a 40.** Arranging the raid into groups of five, for example for shaman totems or a
+   priest in each group. Raid-Helper users expect this for Onyxia.
 
-**Faction.** If WoW Forever splits paladins and shamans by faction as Classic did, a poll can choose
-Alliance or Horde and hide the other class. Check this before building it.
+## Where muster goes further
 
-**Answers that fade.** In a weekly poll, an answer older than about four weeks shows dimmer to the
-organizer, and its owner sees "still right?" with a one-tap "yes" next time they open the poll.
-Schedules change after launch, and stale answers quietly mislead.
-
-**Alts.** A person can add a second character, with its own class and specs, sharing the same times.
-The class counts use the main by default. A raid group (section 4) can use the alt instead.
-
-**Raid needs.** An optional checklist the organizer sets, such as "a druid or mage for decursing" or
-"2 warlocks". Each best window ticks off what it covers. It stays a short list the organizer writes,
-not a built-in rule book.
-
-**A live link preview.** The image Discord shows for a poll's link becomes the poll's own street,
-lit by real answers, with "14 answered". Discord stores the image for a while, so the link carries a
-version number that changes as answers come in.
-
-**The night view.** An optional way to show Everyone: the street of houses from the home page, in
-place of the grid. It's the same data. It's mostly for the look, but it may also read more easily
-for people who find grids hard.
-
-**Done:** the December 9 countdown on the home page (PR #11).
-
-## 2. Lock it in: from poll to schedule
-
-The organizer picks the winning time. The poll becomes the guild's raid schedule. Nobody needs a new
-link.
-
-- **A banner on the poll**, such as "Raid: Thursdays 8–11pm Eastern". Each person sees it in their
-  own time zone, with the next raid's countdown.
-- **A calendar feed.** Each person gets a subscribe link that their phone or Google Calendar keeps up
-  to date. When the raid moves, the calendar moves with it. A one-off "add to calendar" file is there
-  too.
-- **This week: in, out or late.** It's one tap. "In" is already the default for anyone whose marked
-  times cover the raid. People only act when something changes.
-- **The roster for each raid night**, built from the ins: role counts, class mix, the raid's needs.
-  When more sign in than the raid holds, the extras go on standby, in the order the organizer
-  chooses.
-- **A change of plans** (moved, cancelled or an extra night) shows on the poll, in the calendar feed
-  and, later, in Discord.
-- **Several raids.** One poll can lock in more than one slot, such as Hyjal on Thursday and Onyxia on
-  Sunday, each with its own roster.
-
-## 3. Discord
-
-Discord can send slash commands and button presses to a web address. It doesn't need a bot program
-running all the time. So all of this runs on the same Cloudflare Worker, at no extra cost at guild
-scale.
-
-**Sign in with Discord.** This replaces typing a name.
-- Claiming yourself on a second device just works.
-- People can be @'d.
-- The guild's member list makes "who hasn't answered" automatic.
-- Typing a name stays possible for anyone who would rather not sign in.
-
-**Commands.**
-- `/muster poll`: start a poll, or post an existing one, as a card showing the lit street and
-  "14/25 answered". The card updates as people answer.
-- `/muster raid`: post this week's raid, with in, out and late buttons that update the roster on the
-  page.
-- `/muster who`: the people who haven't answered yet, visible only to the organizer.
-
-**Posts the bot makes.** Each is off unless the guild turns it on.
-- A thread for each raid night, with the roster and a link to it.
-- One reminder an hour before the raid, to the people who said they're in.
-- One reminder a week to people who haven't answered, sent to them directly if they agreed to that,
-  otherwise to the organizer.
-- **Drift.** When enough answers change, it posts something like "Thursday now works for 12 of 20;
-  Wednesday works for 17. Look?" This is the part no other tool does.
-
-**Discord roles.** A guild can map its Discord roles to raid groups or to "officer", so the right
-people can edit.
-
-## 4. Raid groups and lockouts
-
-This builds on the planning tool discussed earlier, and it waits for the lockouts to be announced.
-
-- **Groups.** The organizer drags people into Group A, Group B and so on. Each group gets its own
-  best nights, role counts, class mix and needs. Someone in two groups (perhaps on an alt) is checked
-  for clashes.
-- **A suggested split.** Muster proposes groups that each fill their raid size, balance roles and
-  share the most nights. The organizer adjusts it rather than starting from nothing.
-- **A lockout planner.** Once the resets for Barrow Deeps, Hyjal and Onyxia are known, it plans which
-  night covers which raid for each group across the lockout, so nobody is booked twice for one reset.
-- **Officers.** Several people can edit the plan, either through a shared private link (as now) or
-  through Discord roles.
-
-## 5. After the raid
-
-- **Attendance**, from the in/out taps and the raid night roster, visible only to officers. It
-  answers "who has missed the last three", not "rank everyone".
-- **Benching fairly.** When there are more ins than places, it shows who sat out last time, so the
-  same person isn't benched every week.
+- **Finding the time**, as now, for a new raid or a new tier.
+- **Drift.** When a locked-in night stops working, the officer is told privately, for example "Thursday
+  now seats 7 of 10; Wednesday seats 10." Answers that are four weeks old dim and ask "still right?"
+  first, so drift is based on current answers.
+- **Dated absences.** "Out December 22 to January 2" covers every raid in that span. Launch runs into the
+  holidays, so this matters early.
+- **The healer who drops out 20 minutes before.** The officer sees which people on standby can heal and
+  offers them the seat with one tap. Their acceptance is recorded.
+- **Invite time and first pull, shown separately**, so people can plan travel and summons.
+- **A calendar feed.** Each person subscribes once, and their calendar follows the raid. Google Calendar
+  refreshes feeds only every 12–24 hours, so last-minute moves are still announced in Discord.
+- **Raid groups and lockouts.** Group A and Group B each get their own nights and roster, with clash
+  checks for anyone in both. Once Barrow Deeps, Hyjal and Onyxia's resets are known, a planner shows
+  which night covers which raid. Classic reset 20-player raids every 3 days and 40-player raids every 7,
+  so each raid's reset is stored as data and not assumed to be weekly.
+- **Alts.** A second character, with its own class and specs, sharing the same times.
+- **Attendance**, recorded from the roster after the raid and seen only by officers, so benching stays
+  fair: it shows who sat out last time.
 
 ## Not doing
 
-Loot, DKP, logs, gear checks and raid strategy. Other tools do these well, and they would pull muster
-away from the one thing it's best at: the people and the time.
+Loot, DKP, logs, gear checks and raid strategy. Other tools do these well.
+
+**Cut for now:**
+- The live preview image. Discord never refreshes an image in posts it has already shown, and drawing
+  one on the Worker likely needs the paid plan.
+- The night view.
+- An automatic group split. Officers should split groups by hand a few times first.
+
+**Probably not needed:** a faction filter for classes. Astra reports that WoW Forever has dwarf shamans
+and undead paladins; that still needs checking against Blizzard's own announcement.
 
 ## How it would be built
 
-- **Discord commands and buttons** arrive at the Worker as signed web requests. The Worker checks
-  each signature with Discord's public key and answers within three seconds; slower work continues
-  after the reply.
-- **Sign in with Discord** is standard Discord login, with the `identify` and `guilds.members.read`
-  permissions. Muster stores each person's Discord ID with the person in the poll's Durable Object.
-- **A Durable Object for each Discord guild** holds its settings, its member list and its polls.
-  Durable Object alarms send the reminders and run the drift checks, so no separate scheduler is
-  needed.
-- **The live preview image** has to be a PNG, because Discord won't show SVG. Turning the street
-  into a PNG on the Worker needs a small image library; that's a dependency, and it would have to
-  earn its place.
-- **The calendar feed** is a plain-text calendar file at a private address for each person, served by
-  the Worker.
-- **Discord verification:** once the bot is in 100 servers, Discord requires an identity check and a
-  privacy policy. A guild-only bot never gets there.
+Everything stays on the one Cloudflare Worker. Discord sends slash commands and button presses to it as
+web requests, so no bot program has to keep running.
 
-## A possible order
+**Discord interactions**
+- Check each request's Ed25519 signature against the raw body, using Web Crypto, and answer Discord's
+  `PING`.
+- Reply within three seconds. Anything slower gets a "deferred" reply, then finishes in `waitUntil`.
+- A follow-up token lasts only 15 minutes. The raid card is edited with the bot's own token and the
+  stored message ID.
+- Edits are batched, because Discord allows about 5 edits to a channel per 5 seconds.
 
-1. **Before December 9:** who hasn't answered, what a time still needs, raid size in best times. These
-   are small, use no Discord, and help the pilot right away.
-2. **Launch week:** lock it in, this week's in/out/late, the calendar feed.
-3. **Next:** Discord sign-in, `/muster poll` and `/muster raid`, reminders.
-4. **Once the lockouts are announced:** raid groups, the lockout planner, drift.
-5. **Later:** alts, answers that fade, attendance, the live preview image, the night view.
+**Sign in with Discord**
+- Uses the `identify` permission, a `state` check and a session cookie.
+- Someone who answered before signing in claims their answer from the browser that has it.
+- Sign-in does not give the guild's member list. Listing members needs the bot's Server Members
+  permission, which Discord reviews once a bot is in 100 servers. "Who hasn't answered" starts with a
+  pool the officer chooses.
 
-## Open questions for Faye
+**Storage and reminders**
+- Each poll's Durable Object stays the one place its truth lives.
+- A thin guild object maps Discord servers and channels to polls and keeps a queue of due jobs: posts,
+  reminders, drift checks.
+- An object has only one alarm, so the alarm is set to the earliest job.
+- Alarms can fire more than once, so every send is keyed so it happens only once. Before sending, a job
+  checks the raid hasn't moved.
+- "An hour before" is worked out in the server's time zone when the alarm fires, so daylight saving
+  can't shift it.
 
-- **Your guild or any guild?** Guild-only skips Discord verification, a public listing and
-  multi-server admin, and is much faster.
-- **One organizer or several officers** for raid groups?
-- **Does WoW Forever split paladin and shaman by faction?**
-- **How much should the bot post** without being asked? The plan above defaults to almost nothing.
-- **A name.** "Muster" works as a bot name too, and `/muster raid` reads well.
+**The calendar feed**
+- A private, revocable address.
+- Each raid keeps the same event ID, and every change raises the event's version number.
+- A weekly rule with the server's named time zone, and cancelled nights listed as exceptions.
+
+**Discord's rules**
+- Verification is needed at 100 servers. A bot for one guild never gets there.
+- Data is keyed by guild from the start, so opening muster to other guilds later doesn't mean moving
+  data.
+
+## The order
+
+**Before December 9: one complete path for Barrow Deeps, on the web.**
+1. Lock in a date and time on the poll: the banner, the countdown, a calendar file, move and cancel, and
+   the Discord timestamp to copy.
+2. Signing up for each raid on the page (in, late with a time, tentative, out), with the roster and
+   standby. "Usually free" comes from the poll.
+3. Dated absences.
+
+The guild can raid on this from launch day. Raid-Helper can still be used for launch week if the bot
+isn't ready.
+
+**Launch weeks: the bot.**
+4. Set up a Discord app; Faye creates it and pastes its keys in privately. Then the `/muster raid` card
+   with sign-up buttons, the edited roster card and recurring posts.
+5. Sign in with Discord, linked to people's existing answers.
+6. Reminders, and the officer moving people between seated and standby.
+
+**Then:**
+- groups for a 40, before Onyxia;
+- drift and "still right?";
+- the dropped-healer swap;
+- the calendar feed.
+
+**Once the lockouts are announced:** raid groups and the lockout planner.
+
+**Later:** alts and attendance.
+
+## Open questions
+
+- **Which Discord channel** should raid cards go to, and who are the officers?
+- **How far ahead** should the weekly raid post go up: 5 days, a week?
+- **Groups for a 40:** what does the guild arrange groups by now?
+- **Pilot timing:** switch to muster for the first raid, or run it alongside Raid-Helper for a week?
