@@ -217,33 +217,32 @@ export function PollForm({
             </select>
           </label>
         </div>
-        <p className="hint">Best times looks for windows this long. Anyone can try other lengths later.</p>
-      </fieldset>
-
-      <fieldset className="field">
-        <legend>Classes</legend>
-        <div className="day-chips" role="group" aria-label="Classes to offer">
-          {classOptions.map((c) => (
-            <button
-              type="button"
-              key={c}
-              className="chip class-chip icon-chip"
-              style={classStyle(c)}
-              aria-pressed={classes.includes(c)}
-              onClick={() => setClasses((list) => toggle(list, c))}
-            >
-              <ClassIcon cls={c} />
-              {c}
-            </button>
-          ))}
-        </div>
-        <p className="hint">
-          Everyone picks their class from these, and a spec or two. Tanks, healers and dps are counted from the specs.
-        </p>
+        <p className="hint">You can try other lengths in Best times.</p>
       </fieldset>
 
       <details className="field more" open={editing || undefined}>
-        <summary>More options</summary>
+        <summary>Classes, slot size &amp; notes</summary>
+        <fieldset className="field">
+          <legend>Classes</legend>
+          <div className="day-chips" role="group" aria-label="Classes to offer">
+            {classOptions.map((c) => (
+              <button
+                type="button"
+                key={c}
+                className="chip class-chip icon-chip"
+                style={classStyle(c)}
+                aria-pressed={classes.includes(c)}
+                onClick={() => setClasses((list) => toggle(list, c))}
+              >
+                <ClassIcon cls={c} />
+                {c}
+              </button>
+            ))}
+          </div>
+          <p className="hint">
+            Everyone picks their class from these, and a spec or two. Tanks, healers and dps are counted from the specs.
+          </p>
+        </fieldset>
         <fieldset className="field">
           <legend>Slot size</legend>
           <div className="segmented" role="radiogroup" aria-label="Slot size">

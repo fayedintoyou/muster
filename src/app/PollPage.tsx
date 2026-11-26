@@ -592,7 +592,7 @@ export function PollPage({ id }: { id: string }) {
               </p>
             ) : (
               <div className="group-main">
-              <p className="hint group-hint">Everyone’s answers, just to look at. Tap a window to see who’s free.</p>
+              <p className="hint group-hint">Tap a window to see who’s free.</p>
               <div className="legend" aria-hidden="true">
                 <span>none free</span>
                 <span className="legend-ramp" style={{ background: GLOW_GRADIENT }} />

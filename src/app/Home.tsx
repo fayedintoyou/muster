@@ -23,8 +23,7 @@ export function Home() {
           <div className="hero-text">
             <h1 className="display">Find the night everyone can raid.</h1>
             <p className="lede">
-              Make a poll below and drop its link in Discord. Everyone paints the hours they’re free, each in their
-              own time zone, and muster finds the windows most of you can make.
+              Share a poll in Discord. Everyone marks their hours in their own time zone.
             </p>
           </div>
         </section>

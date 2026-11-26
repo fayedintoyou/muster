@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { glow } from './glow';
 
 // The home page's picture: a street of seven houses, one for each night of the week, with a window for
@@ -19,10 +19,28 @@ const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 const ROOFS = ['gable', 'flat', 'steep', 'gable', 'chimney', 'flat', 'steep'];
 const TIMES = ['8pm', '', '9pm', '', '10pm', ''];
 
+function daysToLaunch() {
+  const now = new Date();
+  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  return (Date.UTC(2026, 11, 9) - today) / 86_400_000;
+}
+
 export function Panes() {
+  const [days, setDays] = useState(daysToLaunch);
+  useEffect(() => {
+    const update = () => setDays(daysToLaunch());
+    const timer = window.setInterval(update, 60_000);
+    document.addEventListener('visibilitychange', update);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', update);
+    };
+  }, []);
+  // Bring three more windows on each day in the fortnight before launch.
+  const lit = Math.max(3, 42 - days * 3);
   return (
-    <figure className="street" aria-hidden="true">
-      <div className="street-row">
+    <figure className="street">
+      <div className="street-row" aria-hidden="true">
         <div className="street-times">
           {TIMES.map((t, i) => (
             <span key={i}>{t}</span>
@@ -32,7 +50,9 @@ export function Panes() {
           <div key={col} className="house" data-roof={ROOFS[col]}>
             <span className="roof" />
             <span className="house-body">
-              {night.map((level, row) => (
+              {night.map((warmth, row) => {
+                const level = days >= 0 && (col * 6 + row) * 17 % 42 >= lit ? 0 : warmth;
+                return (
                 <span
                   key={row}
                   className="window"
@@ -45,16 +65,16 @@ export function Panes() {
                     } as CSSProperties
                   }
                 />
-              ))}
+                );
+              })}
               <span className="door">{DAYS[col]}</span>
             </span>
           </div>
         ))}
       </div>
-      <figcaption>
-        Every poll is a street like this: a house for each night, a window for each half hour. The more of the guild
-        that’s free, the brighter the window.
-      </figcaption>
+      {days >= 0 && (
+        <figcaption><time dateTime="2026-12-09">Dec 9</time> · {days === 0 ? 'Launch day' : `${days} ${days === 1 ? 'day' : 'days'} until launch`}</figcaption>
+      )}
     </figure>
   );
 }

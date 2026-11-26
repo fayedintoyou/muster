@@ -115,6 +115,8 @@ try {
   assert.equal(await p1.locator('.poll-form [aria-label="Roles to ask about"]').count(), 0, 'roles aren’t asked separately');
   assert.equal(await p1.locator('.poll-form [aria-label="Classes to offer"] .chip[aria-pressed="true"]').count(), 9, 'all nine classes start on');
   assert.equal(await p1.locator('.poll-form [aria-label="Classes to offer"] .chip .class-icon').count(), 9, 'each class has its icon');
+  assert.equal(await p1.locator('.poll-form .class-chip').first().isVisible(), false);
+  await p1.click('.poll-form .more summary');
   await p1.click('.poll-form .class-chip:text-is("druid")');
   await p1.click('button:text("make the poll")');
   await p1.waitForURL(/\/e\/[a-z0-9]{8}$/);
