@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Mark, Marks, Person, PollState } from '../core/types';
 import { buildGrid } from '../core/grid';
 import { tallySlots } from '../core/best';
-import { formatRange, plural, zonePlace } from '../core/format';
+import { formatRange, plural, serverTime, zonePlace } from '../core/format';
 import { MINUTE } from '../core/time';
 import { LIMITS } from '../core/validate';
 import { ApiError, api } from './api';
@@ -273,9 +273,10 @@ export function PollPage({ id }: { id: string }) {
   const link = `${location.origin}/e/${id}`;
   const nameOf = (pid: string) => state.people.find((p) => p.id === pid)?.name ?? 'someone';
   const firstSlot = grid.columns[0]?.slots[0];
-  const nightRange = firstSlot
-    ? formatRange(firstSlot.instant, firstSlot.instant + grid.columns[0].slots.length * poll.slot * MINUTE, zone)
-    : '';
+  const nightEnd = firstSlot ? firstSlot.instant + grid.columns[0].slots.length * poll.slot * MINUTE : 0;
+  const nightRange = firstSlot ? formatRange(firstSlot.instant, nightEnd, zone) : '';
+  const serverRange = firstSlot ? serverTime(poll.realm, zone, firstSlot.instant, nightEnd) : null;
+  const onServerTime = Boolean(poll.realm && firstSlot && !serverRange);
   const when =
     poll.mode === 'weekly'
       ? `Every week, ${plural(poll.days.length, 'night')} to choose from`
@@ -379,7 +380,8 @@ export function PollPage({ id }: { id: string }) {
         <section className="poll-head">
           <h1 className="title">{poll.title}</h1>
           <p className="poll-when">
-            {when}, {nightRange} in {zonePlace(zone)} time.{' '}
+            {when}, {nightRange} in {zonePlace(zone)} time
+            {serverRange ? ` (${serverRange} server time)` : onServerTime ? ', the same as the server' : ''}.{' '}
             <span className="muted">
               {answeredCount === 0 ? 'No answers yet.' : `${plural(answeredCount, 'person', 'people')} answered.`}
             </span>
@@ -616,6 +618,10 @@ export function PollPage({ id }: { id: string }) {
                       <span className="muted">
                         {focusTally.yes.length + focusTally.maybe.length} of {counted.length} free
                       </span>
+                      {(() => {
+                        const server = serverTime(poll.realm, zone, focusSlot.instant);
+                        return server ? <span className="muted server-time">{server} server</span> : null;
+                      })()}
                     </p>
                     {focusTally.yes.length > 0 && (
                       <p>

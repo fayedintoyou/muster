@@ -3,7 +3,7 @@ import type { Grid } from '../core/grid';
 import type { Candidate } from '../core/best';
 import type { Person, Poll } from '../core/types';
 import { bestWindows } from '../core/best';
-import { formatDate, formatDuration, formatRange, formatTime, weekdayName } from '../core/format';
+import { formatDate, formatDuration, formatRange, formatTime, serverTime, weekdayName } from '../core/format';
 import { MINUTE } from '../core/time';
 import { discordTimestamps, nextOccurrence } from '../core/occurrence';
 import { useCopied } from './copy';
@@ -122,6 +122,11 @@ export function BestTimes({
                     <h3>
                       {days}, {g.range}
                     </h3>
+                    {(() => {
+                      const start = column.slots[c.first].instant;
+                      const server = serverTime(poll.realm, zone, start, start + c.span * poll.slot * MINUTE);
+                      return server ? <p className="best-server">{server} server time</p> : null;
+                    })()}
                     {c.last > c.first && (
                       <p className="best-flex">or start as late as {formatTime(last.instant, zone)} with the same people</p>
                     )}

@@ -190,6 +190,7 @@ try {
 
   // US zones go by their region, and the map switches between them.
   assert.match(await p1.locator('.poll-when').innerText(), /in Eastern time/, 'New York reads as Eastern time');
+  assert.match(await p1.locator('.poll-when').innerText(), /\(7pm–12am server time\)/, 'with the realm’s Central time beside it');
   assert.equal(await p1.locator('.topbar .zone-current').innerText(), 'Eastern time');
   assert.match(await p1.locator('.paint .row-head').first().innerText(), /^8pm/);
   await p1.click('.topbar .zone-trigger');
@@ -303,6 +304,7 @@ try {
   const top = await p1.locator('.best-item').first().innerText();
   assert.match(top, /Thursday/, `best window is Thursday (got ${top})`);
   assert.equal(await p1.locator('.best-item').first().locator('.best-classes').innerText(), '2 priests, 1 mage', 'a best window shows the classes of who can come');
+  assert.match(await p1.locator('.best-item').first().locator('.best-server').innerText(), /server time$/, 'and its time on the server');
   assert.match(await p1.locator('.best-item').first().locator('.roles-count').innerText(), /0\s*tank\s+2\s*healer\s+2\s*dps/, 'and its roles, counted from specs');
   await shot(p1, '06-best-phone');
   await p1.locator('.best-item').first().locator('button:text("copy for discord")').click();

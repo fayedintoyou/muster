@@ -2,7 +2,7 @@ import { type FormEvent, useMemo, useState } from 'react';
 import type { Mode, PollSettings, SlotSize } from '../core/types';
 import { SLOT_SIZES, validateSettings } from '../core/validate';
 import { WEEK_ORDER, slotKeys } from '../core/slots';
-import { ROLES, WOW_CLASSES } from '../core/classes';
+import { REALM_TIME, ROLES, WOW_CLASSES } from '../core/classes';
 import { formatDuration, formatMinute, weekdayName } from '../core/format';
 import { today, windowLength } from '../core/time';
 import { DatePicker } from './DatePicker';
@@ -20,6 +20,7 @@ export const DEFAULT_SETTINGS: PollSettings = {
   end: 60,
   slot: 30,
   tz: detectedZone(),
+  realm: REALM_TIME,
   roles: ['tank', 'healer', 'dps'],
   classes: [...WOW_CLASSES],
   length: 180,
@@ -56,6 +57,7 @@ export function PollForm({
   const [end, setEnd] = useState(initial.end);
   const [slot, setSlot] = useState<SlotSize>(initial.slot);
   const [tz, setTz] = useState(initial.tz);
+  const [realm, setRealm] = useState(initial.realm);
   const [classes, setClasses] = useState(initial.classes.length ? initial.classes : DEFAULT_SETTINGS.classes);
   // The usual choices, plus any a poll already had that aren't among them.
   const classOptions = useMemo(() => [...new Set([...DEFAULT_SETTINGS.classes, ...initial.classes])], [initial.classes]);
@@ -72,6 +74,7 @@ export function PollForm({
     end,
     slot,
     tz,
+    realm,
     // Tank, healer and dps are counted from everyone's specs.
     roles: [...ROLES],
     classes: classOptions.filter((c) => classes.includes(c)),
@@ -199,6 +202,7 @@ export function PollForm({
         <ZonePicker value={tz} onChange={setTz} detected={detectedZone()} />
       </fieldset>
 
+
       <fieldset className="field">
         <legend>How long is a raid?</legend>
         <div className="time-row">
@@ -216,7 +220,7 @@ export function PollForm({
       </fieldset>
 
       <details className="field more" open={editing || undefined}>
-        <summary>Classes, slot size &amp; notes</summary>
+        <summary>Classes, server time, slot size &amp; notes</summary>
         <fieldset className="field">
           <legend>Classes</legend>
           <div className="day-chips" role="group" aria-label="Classes to offer">
@@ -237,6 +241,14 @@ export function PollForm({
           <p className="hint">
             Raid roles come from each player’s specs.
           </p>
+        </fieldset>
+        <fieldset className="field">
+          <legend>Server time</legend>
+          <label className="check">
+            <input type="checkbox" checked={realm !== ''} onChange={(e) => setRealm(e.target.checked ? REALM_TIME : '')} />
+            <span>Show the server’s time beside every time</span>
+          </label>
+          {realm !== '' && <ZonePicker value={realm} onChange={setRealm} label="Server time zone" />}
         </fieldset>
         <fieldset className="field">
           <legend>Slot size</legend>

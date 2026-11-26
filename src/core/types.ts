@@ -13,6 +13,8 @@ export interface PollSettings {
   end: number;
   slot: SlotSize;
   tz: string;
+  /** The game server's time zone, shown beside times as "server time". Empty shows none. */
+  realm: string;
   /** Roles people can pick, such as tank, healer, dps. Empty turns roles off. */
   roles: string[];
   /** Classes people can pick one of, such as WoW's nine. Empty turns classes off. */

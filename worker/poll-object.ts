@@ -1,7 +1,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import type { Person, Poll, PollSettings, PollState } from '../src/core/types';
 import { slotKeys } from '../src/core/slots';
-import { ROLES, WOW_CLASSES, rolesFor } from '../src/core/classes';
+import { REALM_TIME, ROLES, WOW_CLASSES, rolesFor } from '../src/core/classes';
 import {
   LIMITS,
   cleanMarks,
@@ -110,10 +110,13 @@ export class PollObject extends DurableObject<Env> {
     if (!poll) return undefined;
     // Polls made before there were classes ask for them now (every poll so far is a WoW guild's), with
     // tank, healer and dps counted from the specs if they weren't counting roles already.
+    let upgraded = poll;
     if (poll.classes === undefined) {
-      return { ...poll, classes: [...WOW_CLASSES], roles: poll.roles.length ? poll.roles : [...ROLES] };
+      upgraded = { ...upgraded, classes: [...WOW_CLASSES], roles: poll.roles.length ? poll.roles : [...ROLES] };
     }
-    return poll;
+    // And server time, which WoW Forever's US realms keep on Central.
+    if (poll.realm === undefined) upgraded = { ...upgraded, realm: REALM_TIME };
+    return upgraded;
   }
 
   private people(): StoredPerson[] {
