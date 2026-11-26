@@ -19,6 +19,9 @@ export function specsFor(cls: string): string[] {
   return SPECS[cls] ?? [];
 }
 
+/** WoW Forever's US realms run on Central time: the default server time for a poll. */
+export const REALM_TIME = 'America/Chicago';
+
 export const ROLES = ['tank', 'healer', 'dps'];
 
 // What each spec does in a raid. A feral druid can tank or deal damage, so it counts as both.

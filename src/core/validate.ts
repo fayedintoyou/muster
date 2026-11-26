@@ -84,6 +84,9 @@ export function validateSettings(input: unknown, now = Date.now()): Result<PollS
   const tz = raw.tz;
   if (!isValidTimeZone(tz)) return fail('Unknown time zone.');
 
+  const realm = raw.realm === undefined || raw.realm === '' ? '' : raw.realm;
+  if (realm !== '' && !isValidTimeZone(realm)) return fail('Unknown server time zone.');
+
   const slot = Number(raw.slot) as SlotSize;
   if (!SLOT_SIZES.includes(slot)) return fail('Slots are 15, 30 or 60 minutes.');
 
@@ -142,7 +145,7 @@ export function validateSettings(input: unknown, now = Date.now()): Result<PollS
     return fail('Raid length must be between 15 minutes and 12 hours.');
   }
 
-  return ok({ title, notes, mode, days, start, end, slot, tz, roles: roles.value, classes: classes.value, length });
+  return ok({ title, notes, mode, days, start, end, slot, tz, realm: realm as string, roles: roles.value, classes: classes.value, length });
 }
 
 export function validateName(input: unknown): Result<string> {

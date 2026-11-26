@@ -4,7 +4,7 @@ import { buildGrid } from './grid';
 import { nextOccurrence, discordTimestamps } from './occurrence';
 import { slotKeys } from './slots';
 import { localTime, tzOffset, windowLength, zonedInstant } from './time';
-import { formatMinute, formatRange } from './format';
+import { formatMinute, formatRange, serverTime } from './format';
 import { cleanMarks, validateSettings } from './validate';
 import type { Person, PollSettings } from './types';
 
@@ -18,6 +18,7 @@ const weekly: PollSettings = {
   end: 60,
   slot: 30,
   tz: NY,
+  realm: '',
   roles: ['tank', 'healer', 'dps'],
   classes: [],
   length: 90,
@@ -168,12 +169,27 @@ describe('format', () => {
     expect(formatRange(at, at + 3 * 3600_000, NY, true)).toBe('8–11pm');
     expect(formatRange(at + 3 * 3600_000, at + 6 * 3600_000, NY, true)).toBe('11pm–2am');
   });
+
+  it('gives server time only when it reads differently', () => {
+    const at = zonedInstant({ y: 2026, m: 12, d: 1 }, 20 * 60, NY);
+    expect(serverTime('America/Chicago', NY, at, at + 3 * 3600_000)).toMatch(/^7(:00)?\s?(–|-)\s?10(:00)?\s?pm$|^19:00–22:00$/);
+    expect(serverTime('America/Chicago', 'America/Chicago', at)).toBeNull();
+    expect(serverTime('', NY, at)).toBeNull();
+  });
 });
 
 describe('validation', () => {
   it('accepts a weekly poll and orders its days Monday first', () => {
     const r = validateSettings({ ...weekly, days: ['w0', 'w4', 'w2'] }, NOW);
     expect(r.ok && r.value.days).toEqual(['w2', 'w4', 'w0']);
+  });
+
+  it('keeps a server time zone, and treats a missing one as none', () => {
+    const r = validateSettings({ ...weekly, realm: 'America/Chicago' }, NOW);
+    expect(r.ok && r.value.realm).toBe('America/Chicago');
+    const { realm: _, ...old } = weekly;
+    const none = validateSettings(old, NOW);
+    expect(none.ok && none.value.realm).toBe('');
   });
 
   it('sorts and dedupes dates', () => {
@@ -183,6 +199,7 @@ describe('validation', () => {
 
   it('refuses what it cannot schedule', () => {
     expect(validateSettings({ ...weekly, tz: 'Mars/Olympus' }, NOW).ok).toBe(false);
+    expect(validateSettings({ ...weekly, realm: 'Mars/Olympus' }, NOW).ok).toBe(false);
     expect(validateSettings({ ...weekly, start: 1205 }, NOW).ok).toBe(false);
     expect(validateSettings({ ...weekly, title: '  ' }, NOW).ok).toBe(false);
     const many = Array.from({ length: 31 }, (_, i) => `2026-12-${String(i + 1).padStart(2, '0')}`);

@@ -846,6 +846,7 @@ button.row-head:hover { color: var(--lamp); }
   line-height: 1.2;
 }
 .best-flex { color: var(--muted); font-size: 0.875rem; margin: 0.15rem 0 0; }
+.best-server { color: var(--muted); font-family: var(--mono); font-size: 0.75rem; margin: 0.2rem 0 0; }
 .best-count { display: flex; align-items: baseline; gap: 0.6rem; margin: 0; }
 .count {
   font-size: 2rem;

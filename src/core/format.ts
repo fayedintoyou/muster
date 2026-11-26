@@ -1,4 +1,4 @@
-import { DAY_MINUTES, type YMD, localTime } from './time';
+import { DAY_MINUTES, type YMD, localTime, tzOffset } from './time';
 
 // Labels in the reader's own conventions (12- or 24-hour clock, month names), from Intl.
 
@@ -25,6 +25,15 @@ export function formatMinute(minute: number, h12 = prefersHour12(), compact = tr
 
 export function formatTime(instant: number, tz: string, h12 = prefersHour12()): string {
   return formatMinute(localTime(instant, tz).minutes, h12);
+}
+
+/**
+ * The same moment on the game server's clock, or null when it reads the same as the viewer's (or the poll
+ * has no server time). With `end`, a range: "7–10pm".
+ */
+export function serverTime(realm: string, viewer: string, start: number, end?: number): string | null {
+  if (!realm || tzOffset(start, realm) === tzOffset(start, viewer)) return null;
+  return end === undefined ? formatTime(start, realm) : formatRange(start, end, realm);
 }
 
 /** "8–11pm", "11pm–2am", "20:00–23:00". */
