@@ -149,8 +149,8 @@ web requests, so no bot program has to keep running.
    standby. "Usually free" comes from the poll.
 3. Dated absences.
 
-The guild can raid on this from launch day. Raid-Helper can still be used for launch week if the bot
-isn't ready.
+The guild raids on this from launch day: raid posts go up as a copied Discord message with a link
+until the bot is ready.
 
 **Launch weeks: the bot.**
 4. Set up a Discord app; Faye creates it and pastes its keys in privately. Then the `/muster raid` card
@@ -168,9 +168,24 @@ isn't ready.
 
 **Later:** alts and attendance.
 
-## Open questions
+## Guild settings
 
-- **Which Discord channel** should raid cards go to, and who are the officers?
-- **How far ahead** should the weekly raid post go up: 5 days, a week?
-- **Groups for a 40:** what does the guild arrange groups by now?
-- **Pilot timing:** switch to muster for the first raid, or run it alongside Raid-Helper for a week?
+These are choices each guild makes for itself, with sensible defaults, not decisions muster makes for
+them:
+
+| Setting | Default |
+|---|---|
+| Channel for raid posts | the channel `/muster raid` was used in |
+| Officers (who can post, edit and move people) | the poll's maker, plus any Discord roles the guild names |
+| When each week's raid post goes up | 6 days before the raid |
+| Reminders, and where they go | one, an hour before, to those signed in; off until turned on |
+| Who counts as the raid pool for "hasn't answered" | everyone who has answered the poll |
+| Groups for a 40 | arranged by hand; a guild can save a layout as its template |
+| Server time zone | Central |
+| Raid size, tanks and healers | 10, 20 or 40, with the usual make-up, editable per raid |
+
+## Pilot
+
+The guild uses muster from the first raid on December 9, not Raid-Helper. So the web path in "Before
+December 9" has to be complete and tried with officers before then. The bot follows as soon as it's
+ready.
