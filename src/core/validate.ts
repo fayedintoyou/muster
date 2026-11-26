@@ -21,6 +21,7 @@ export const LIMITS = {
   people: 150,
   minLength: 15,
   maxLength: 720,
+  size: 40,
 } as const;
 
 export const SLOT_SIZES: SlotSize[] = [15, 30, 60];
@@ -145,7 +146,22 @@ export function validateSettings(input: unknown, now = Date.now()): Result<PollS
     return fail('Raid length must be between 15 minutes and 12 hours.');
   }
 
-  return ok({ title, notes, mode, days, start, end, slot, tz, realm: realm as string, roles: roles.value, classes: classes.value, length });
+  const size = raw.size === undefined ? 0 : Number(raw.size);
+  if (!Number.isInteger(size) || size < 0 || size === 1 || size > LIMITS.size) {
+    return fail(`A raid holds between 2 and ${LIMITS.size} people.`);
+  }
+  const makeup: Record<string, number> = {};
+  if (size > 0) {
+    const given = (raw.makeup ?? {}) as Record<string, unknown>;
+    for (const role of ['tank', 'healer']) {
+      const n = given[role] === undefined ? 0 : Number(given[role]);
+      if (!Number.isInteger(n) || n < 0) return fail('Tanks and healers are whole numbers.');
+      makeup[role] = n;
+    }
+    if (makeup.tank + makeup.healer > size) return fail(`A raid of ${size} can’t have that many tanks and healers.`);
+  }
+
+  return ok({ title, notes, mode, days, start, end, slot, tz, realm: realm as string, size, makeup, roles: roles.value, classes: classes.value, length });
 }
 
 export function validateName(input: unknown): Result<string> {

@@ -116,6 +116,7 @@ export class PollObject extends DurableObject<Env> {
     }
     // And server time, which WoW Forever's US realms keep on Central.
     if (poll.realm === undefined) upgraded = { ...upgraded, realm: REALM_TIME };
+    if (poll.size === undefined) upgraded = { ...upgraded, size: 0, makeup: {} };
     return upgraded;
   }
 

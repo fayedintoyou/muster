@@ -21,6 +21,10 @@ export interface PollSettings {
   classes: string[];
   /** How long a raid (or whatever is being planned) runs, in minutes: the length best times look for. */
   length: number;
+  /** How many the raid holds, such as 10, 20 or 40. 0: any number. */
+  size: number;
+  /** With a size: the tanks and healers it wants, as { tank, healer }. Everyone else is dps. */
+  makeup: Record<string, number>;
 }
 
 export interface Poll extends PollSettings {
