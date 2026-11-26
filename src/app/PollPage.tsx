@@ -8,6 +8,7 @@ import { LIMITS } from '../core/validate';
 import { ApiError, api } from './api';
 import { Wordmark, navigate } from './App';
 import { BestTimes } from './BestTimes';
+import { RaidBanner } from './RaidBanner';
 import { slotLabel } from './GridFrame';
 import { HeatGrid } from './HeatGrid';
 import { JoinForm } from './JoinForm';
@@ -387,6 +388,9 @@ export function PollPage({ id }: { id: string }) {
             </span>
           </p>
           {poll.notes && <p className="poll-notes">{poll.notes}</p>}
+          {state.raid && (
+            <RaidBanner poll={poll} raid={state.raid} zone={zone} admin={membership.admin} onState={applyState} />
+          )}
           {justMade ? (
             <div className="share-panel" role="status">
               <p>
@@ -684,6 +688,15 @@ export function PollPage({ id }: { id: string }) {
               onLength={setLength}
               nameOf={nameOf}
               zone={zone}
+              raid={state.raid}
+              onLock={
+                membership.admin
+                  ? async (start, minutes) => {
+                      applyState(await api.lockRaid(id, membership.admin!, { start, minutes, skips: [] }));
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }
+                  : undefined
+              }
             />
             {excluded.size > 0 && (
               <p className="hint">

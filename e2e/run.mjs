@@ -4,7 +4,7 @@
 // Screenshots land in e2e/shots/. Needs a built UI (npm run build) and Chrome (CHROME=/path/to/chrome).
 
 import { spawn } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import assert from 'node:assert/strict';
@@ -318,6 +318,27 @@ try {
   await p1.click('.tabs button:text("best times")');
   const withCy = await p1.locator('.best-item').allInnerTexts();
   assert.ok(withCy.length > 0 && withCy.every((t) => !/Not free:[^.]*Cy/.test(t)), 'every window includes Cy');
+
+  // ---- Lock it in: the maker picks the top time, and it becomes the raid ----
+  await p1.locator('.best-item').first().locator('button:text("lock in this time")').click();
+  await p1.waitForSelector('.raid-banner');
+  assert.match(await p1.locator('.raid-when').innerText(), /^Thursdays, /, 'the raid repeats on its night');
+  assert.match(await p1.locator('.raid-server').innerText(), /server time$/);
+  assert.match(await p1.locator('.raid-next').innerText(), /^Next: Thu .+, in \d+ (days|hours|minutes)\.$/, 'with the next night and how long until it');
+  assert.equal(await p1.locator('.raid-nights li').count(), 4, 'and the nights coming up');
+  assert.equal(await p1.locator('.best-item').first().locator('button:text("locked in")').count(), 1, 'best times marks the time locked in');
+  await p1.locator('.raid-nights li').first().locator('button:text("call off")').click();
+  await p1.waitForSelector('.raid-nights li[data-off]');
+  assert.match(await p1.locator('.raid-next').innerText(), /^Next: Thu /, 'calling a night off moves next to the one after');
+  const [download] = await Promise.all([p1.waitForEvent('download'), p1.click('.raid-actions button:text("add to calendar")')]);
+  const ics = readFileSync(await download.path(), 'utf8');
+  assert.match(ics, /RRULE:FREQ=WEEKLY/, 'the calendar file repeats weekly');
+  assert.match(ics, /EXDATE;TZID=America\/New_York:/, 'without the night called off');
+  await shot(p1, '06b-raid-phone');
+  await p2.reload();
+  await p2.waitForSelector('.raid-banner');
+  assert.match(await p2.locator('.raid-when').innerText(), /^[A-Z][a-z]+days, \d{2}:\d{2}/, 'Berlin sees the raid on its own night and 24-hour clock');
+  assert.equal(await p2.locator('.raid-banner button:text("call off"), .raid-banner button:text("unlock")').count(), 0, 'only the maker can change the raid');
 
   await shot(p2, '07-desk-full');
 

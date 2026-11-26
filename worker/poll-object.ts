@@ -1,6 +1,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import type { Person, Poll, PollSettings, PollState } from '../src/core/types';
 import { slotKeys } from '../src/core/slots';
+import { type Raid, validateRaid } from '../src/core/raid';
 import { REALM_TIME, ROLES, WOW_CLASSES, rolesFor } from '../src/core/classes';
 import {
   LIMITS,
@@ -135,7 +136,12 @@ export class PollObject extends DurableObject<Env> {
   private state(): PollState | null {
     const poll = this.poll();
     if (!poll) return null;
-    return { poll, people: this.people().map(publicPerson), version: this.kv.get<number>('version') ?? 0 };
+    return {
+      poll,
+      people: this.people().map(publicPerson),
+      raid: this.kv.get<Raid>('raid') ?? null,
+      version: this.kv.get<number>('version') ?? 0,
+    };
   }
 
   private async adminOk(admin: string | undefined): Promise<boolean> {
@@ -319,6 +325,9 @@ export class PollObject extends DurableObject<Env> {
       return fail(400, 'Slot size can’t change once people have answered.');
     }
     this.kv.put('poll', { ...next, id: poll.id, created: poll.created, updated: Date.now() } satisfies Poll);
+    // A locked-in raid whose time is no longer in the poll comes unlocked.
+    const raid = this.kv.get<Raid>('raid');
+    if (raid && !validateRaid(raid, next).ok) this.kv.delete('raid');
     // Roles and classes taken away come off people too.
     if (next.roles.join() !== poll.roles.join() || next.classes.join() !== poll.classes.join()) {
       for (const p of this.people()) {
@@ -327,6 +336,27 @@ export class PollObject extends DurableObject<Env> {
         if (roles.length !== p.roles.length || cls !== (p.cls ?? '')) this.kv.put(`p:${p.id}`, { ...p, roles, cls, specs: cls ? p.specs : [] });
       }
     }
+    this.bump();
+    return { ok: true, state: this.state()! };
+  }
+
+  /** Locks in the raid's time, or changes it (another time, or nights called off). */
+  async lockRaid(admin: string | undefined, input: unknown): Promise<Outcome<{ state: PollState }>> {
+    if (!(await this.adminOk(admin))) return fail(403, 'Only whoever made the poll can lock in the raid.');
+    const poll = this.poll();
+    if (!poll) return fail(404, 'This poll doesn’t exist.');
+    const checked = validateRaid(input, poll);
+    if (!checked.ok) return fail(400, checked.error);
+    const version = (this.kv.get<Raid>('raid')?.version ?? 0) + 1;
+    this.kv.put('raid', { ...checked.value, version } satisfies Raid);
+    this.bump();
+    return { ok: true, state: this.state()! };
+  }
+
+  async unlockRaid(admin: string | undefined): Promise<Outcome<{ state: PollState }>> {
+    if (!(await this.adminOk(admin))) return fail(403, 'Only whoever made the poll can unlock the raid.');
+    if (!this.poll()) return fail(404, 'This poll doesn’t exist.');
+    this.kv.delete('raid');
     this.bump();
     return { ok: true, state: this.state()! };
   }
