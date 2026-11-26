@@ -388,8 +388,7 @@ export function PollPage({ id }: { id: string }) {
           {justMade ? (
             <div className="share-panel" role="status">
               <p>
-                <strong>Your poll is ready.</strong> Mark your own times first, so the first people to open it see how
-                it works. Then send the link to the guild: pasted in Discord, it shows the poll’s name.
+                Mark your own times first, then share the link with your guild.
               </p>
               <div className="share-row">
                 <code className="share-link">{link}</code>
@@ -398,8 +397,7 @@ export function PollPage({ id }: { id: string }) {
                 </button>
               </div>
               <p className="hint">
-                Only this browser can change the poll. You’ll find that at the bottom of the page, under “Change this
-                poll”.
+                To edit this poll from another device, copy the organizer link under “Change this poll”.
               </p>
             </div>
           ) : (
@@ -498,7 +496,7 @@ export function PollPage({ id }: { id: string }) {
                 </div>
                 {poll.classes.length > 0 ? (
                   <div className="my-class">
-                    {!me.cls && !classDraft && <p className="hint">Add your class and spec, so the organizer can count them.</p>}
+                    {!me.cls && !classDraft && <p className="hint">Choose your class and spec.</p>}
                     <ClassPicker
                       classes={poll.classes}
                       cls={classDraft?.cls ?? me.cls}
@@ -542,7 +540,7 @@ export function PollPage({ id }: { id: string }) {
                 </label>
                 {!nothingMarked && (
                   <div className="next-step">
-                    <p>Your times save as you go, so you can close this whenever you’re done.</p>
+                    <p>Your times save automatically.</p>
                     <button
                       type="button"
                       className="button small"
@@ -558,10 +556,9 @@ export function PollPage({ id }: { id: string }) {
               </>
             ) : (
               <>
-                <h3 className="panel-title">First, when can you play?</h3>
+                <h3 className="panel-title">When can you play?</h3>
                 <p className="first-steps">
-                  Light up every night and hour that works for you, in {zonePlace(zone)} time. Then add your name below
-                  and save.
+                  Mark your hours in {zonePlace(zone)} time, then add your name.
                 </p>
                 {toolbar}
                 {howTo}
@@ -588,7 +585,7 @@ export function PollPage({ id }: { id: string }) {
             <h2 className="panel-heading">Everyone</h2>
             {counted.length === 0 ? (
               <p className="empty">
-                No answers yet. Once people mark their times, this grid lights up wherever they overlap.
+                No times marked yet.
               </p>
             ) : (
               <div className="group-main">

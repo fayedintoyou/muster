@@ -85,7 +85,7 @@ export function BestTimes({
           </select>
         </label>
         {result.clamped && (
-          <p className="hint">The poll’s nights are only {formatDuration(result.span * poll.slot)} long, so that’s the window.</p>
+          <p className="hint">Longest available window: {formatDuration(result.span * poll.slot)}.</p>
         )}
         {required.size > 0 && <p className="hint">Only windows {names([...required], nameOf)} can all make.</p>}
       </div>
@@ -93,8 +93,8 @@ export function BestTimes({
       {answered.length < 2 ? (
         <p className="empty">
           {answered.length === 0
-            ? 'Once people mark their times, the nights that suit the most of you show up here.'
-            : 'One answer so far. Once a second person marks their times, the nights that suit the most of you show up here.'}
+            ? 'Best times needs at least two answers.'
+            : 'Waiting for a second answer.'}
         </p>
       ) : result.candidates.length === 0 ? (
         <p className="empty">

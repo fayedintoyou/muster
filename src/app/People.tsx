@@ -30,7 +30,7 @@ export function People({
   const [error, setError] = useState('');
 
   if (people.length === 0) {
-    return <p className="empty">No one has answered yet. Share the link and answers show up here as they come in.</p>;
+    return <p className="empty">Share the poll link to invite your guild.</p>;
   }
 
   return (

@@ -158,10 +158,6 @@ export function PollForm({
               </button>
             ))}
           </div>
-          <p className="hint">
-            Not sure which nights yet? Leave them all on: everyone marks the ones that work for them in a typical
-            week, and muster finds the best.
-          </p>
         </fieldset>
       ) : (
         <fieldset className="field">
@@ -217,7 +213,6 @@ export function PollForm({
             </select>
           </label>
         </div>
-        <p className="hint">You can try other lengths in Best times.</p>
       </fieldset>
 
       <details className="field more" open={editing || undefined}>
@@ -240,7 +235,7 @@ export function PollForm({
             ))}
           </div>
           <p className="hint">
-            Everyone picks their class from these, and a spec or two. Tanks, healers and dps are counted from the specs.
+            Raid roles come from each player’s specs.
           </p>
         </fieldset>
         <fieldset className="field">
