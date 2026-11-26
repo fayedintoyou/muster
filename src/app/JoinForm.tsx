@@ -155,7 +155,7 @@ export function JoinForm({
         />
         {nameMissing && (
           <p className="error" id="join-name-missing" role="alert">
-            Add your name or in-game handle first, so the guild knows whose times these are.
+            Add your name or in-game handle.
           </p>
         )}
         <p className="hint">Answered already on another device? Use the same name to pick up where you left off.</p>
@@ -233,7 +233,7 @@ export function JoinForm({
           {error}
         </p>
       )}
-      {marked === 0 && <p className="hint">You haven’t marked any times above yet. You can save now and mark them after.</p>}
+      {marked === 0 && <p className="hint">You can add your times after saving.</p>}
       <button className="button primary wide" type="submit" disabled={busy}>
         {busy ? 'saving…' : 'save my times'}
       </button>
