@@ -8,7 +8,14 @@ import { DiscordIcon } from './icons';
 // types your name can carry on as you, which is fine for a lot of guilds.
 
 /** What came back from Discord, from the hash the Worker sent the browser back with. Clears the hash. */
-export function discordReturn(): { outcome: string; as?: string; person?: string; token?: string } | null {
+export function discordReturn(): {
+  outcome: string;
+  as?: string;
+  person?: string;
+  token?: string;
+  /** Signed in with Discord but not in the poll yet: lets their answers be saved linked to it. */
+  ticket?: string;
+} | null {
   const params = new URLSearchParams(location.hash.slice(1));
   const outcome = params.get('discord');
   if (!outcome) return null;
@@ -18,6 +25,7 @@ export function discordReturn(): { outcome: string; as?: string; person?: string
     as: params.get('as') ?? undefined,
     person: params.get('person') ?? undefined,
     token: params.get('token') ?? undefined,
+    ticket: params.get('ticket') ?? undefined,
   };
 }
 
@@ -30,7 +38,8 @@ export function discordMessage(back: { outcome: string; as?: string }): string {
     case 'taken':
       return 'That Discord account is already linked to someone else in this poll.';
     case 'none':
-      return 'No one here is linked to that Discord account yet. Mark your times and add your name, then link Discord under your times.';
+      // The join form says what happens next.
+      return '';
     case 'cancelled':
       return '';
     default:

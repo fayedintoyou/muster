@@ -211,7 +211,14 @@ export class PollObject extends DurableObject<Env> {
     return this.state();
   }
 
-  async join(input: JoinInput): Promise<Outcome<{ person: Person; token: string; state: PollState }>> {
+  /**
+   * Answering, or signing in as someone who has. With `discord` (checked by the Worker), the person is
+   * linked to that Discord account, and someone already linked to it signs in without a password.
+   */
+  async join(
+    input: JoinInput,
+    discord?: { id: string; name: string },
+  ): Promise<Outcome<{ person: Person; token: string; state: PollState }>> {
     const name = validateName(input.name);
     if (!name.ok) return fail(400, name.error);
     const password = validatePassword(input.password);
@@ -227,7 +234,13 @@ export class PollObject extends DurableObject<Env> {
       if (input.claim !== true) {
         return fail(409, `${existingBefore.name} has already answered.`, { exists: true, ...lock });
       }
-      if (existingBefore.pass) {
+      const sameDiscord = Boolean(discord && existingBefore.discord?.id === discord.id);
+      if (existingBefore.discord && discord && !sameDiscord) {
+        return fail(403, `${existingBefore.name} is linked to a different Discord account.`, lock);
+      }
+      if (sameDiscord) {
+        // Their own Discord account: signed in already.
+      } else if (existingBefore.pass) {
         if (!password.value) return fail(401, `${existingBefore.name} is locked with a password.`, lock);
         const tries = existingBefore.tries;
         if (tries && tries.n >= MAX_TRIES && Date.now() - tries.since < TRY_WINDOW) {
@@ -252,6 +265,12 @@ export class PollObject extends DurableObject<Env> {
       if (!current) return fail(409, 'That person was just removed. Try again.');
       current.tokens = [...current.tokens, tokenHash].slice(-MAX_TOKENS);
       delete current.tries;
+      if (discord && !current.discord) {
+        const other = this.people().find((p) => p.discord?.id === discord.id && p.id !== current.id);
+        if (other) return fail(409, `That Discord account is already linked to ${other.name}.`);
+        current.discord = discord;
+        current.updated = Date.now();
+      }
       // Times marked on this device only count if they hadn't marked any yet: signing in on a second
       // device mustn't wipe what they marked on the first.
       const claimPoll = this.poll();
@@ -266,7 +285,7 @@ export class PollObject extends DurableObject<Env> {
         }
       }
       this.kv.put(`p:${current.id}`, current);
-      if (changed) this.bump();
+      if (changed || discord) this.bump();
       return { ok: true, person: publicPerson(current), token, state: this.state()! };
     }
 
@@ -276,6 +295,8 @@ export class PollObject extends DurableObject<Env> {
     const people = this.people();
     if (people.some((p) => p.key === key)) return fail(409, `${name.value} has already answered.`, { exists: true });
     if (people.length >= LIMITS.people) return fail(400, `This poll is full (${LIMITS.people} people).`);
+    const linkedTo = discord && people.find((p) => p.discord?.id === discord.id);
+    if (linkedTo) return fail(409, `That Discord account is already linked to ${linkedTo.name}.`);
     const marks = input.marks === undefined ? undefined : cleanMarks(input.marks, new Set(slotKeys(poll)));
     if (marks && !marks.ok) return fail(400, marks.error);
     // A poll that asks for classes needs a class and a spec or two; the roles come from the specs.
@@ -301,6 +322,7 @@ export class PollObject extends DurableObject<Env> {
       salt: secret?.salt,
       pass: secret?.hash,
       tokens: [tokenHash],
+      discord,
       created: now,
       updated: now,
     };

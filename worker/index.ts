@@ -1,6 +1,6 @@
 import { PollObject } from './poll-object';
 import { ID_PATTERN, TEAM_ID, randomId, randomToken, sha256 } from './crypto';
-import { discordCallback, discordStart } from './discord';
+import { discordCallback, discordStart, discordTicket } from './discord';
 import { auth, error, fromFailure, json } from './http';
 import { validateSettings } from '../src/core/validate';
 import { POLL_RAID } from '../src/core/signup';
@@ -142,7 +142,14 @@ async function api(request: Request, env: Env, url: URL): Promise<Response> {
     if (method !== 'POST') return error(405, 'Method not allowed.');
     const body = await readJson(request);
     if (body instanceof Response) return body;
-    const result = await poll.join(body);
+    // Signed in with Discord first: the Worker checks the ticket it signed, and the person is linked.
+    let discord: { id: string; name: string } | undefined;
+    if (typeof body.discordTicket === 'string') {
+      const ticket = await discordTicket(env, body.discordTicket, id);
+      if (!ticket) return error(400, 'Your Discord sign-in has expired. Sign in with Discord again.');
+      discord = ticket;
+    }
+    const result = await poll.join(body, discord);
     return result.ok ? json({ person: result.person, token: result.token, state: result.state }, 201) : fromFailure(result);
   }
 
