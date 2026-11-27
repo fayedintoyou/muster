@@ -158,6 +158,23 @@ try {
   const pollUrl = p1.url();
   const pollId = pollUrl.split('/').pop();
   await p1.waitForSelector('.share-panel');
+  // ---- A first-time tour, once: the grid, available vs if needed, the time zone, who you are, the tabs ----
+  await p1.waitForSelector('.tour-card');
+  assert.equal(await p1.locator('.tour-count').innerText(), '1 of 5');
+  await p1.waitForTimeout(1200);
+  await shot(p1, '02a-tour-grid-phone', false);
+  await p1.click('.tour-card button:text("next")');
+  assert.match(await p1.locator('.tour-title').innerText(), /Available, or if needed/);
+  await p1.waitForTimeout(1200);
+  await shot(p1, '02a-tour-if-needed-phone', false);
+  for (let n = 0; n < 3; n++) await p1.click('.tour-card button:text("next")');
+  await p1.click('.tour-card button:text("got it")');
+  assert.equal(await p1.locator('.tour-card').count(), 0, 'the tour closes');
+  assert.equal(await p1.evaluate(() => localStorage.getItem('muster:tour')), 'done', 'and is remembered, so it doesn’t come back');
+  await p1.click('.how.first button:text("show me how")');
+  await p1.click('.tour-card button:text("skip")');
+  assert.equal(await p1.locator('.tour-card').count(), 0, 'but can be replayed, and skipped');
+  await p1.evaluate(() => window.scrollTo(0, 0));
   assert.match(await p1.locator('.share-panel').innerText(), /Mark your own times first/, 'the maker is told what to do next');
   // Someone opening the poll marks their times first, then says who they are.
   assert.ok(await p1.locator('.panel-mine .first-steps').isVisible(), 'a first-time visitor sees how answering works');
@@ -246,6 +263,7 @@ try {
     timezoneId: 'Europe/Berlin',
     locale: 'en-GB',
   });
+  await desk.addInitScript(() => localStorage.setItem('muster:tour', 'done'));
   const p2 = await desk.newPage();
   watch(p2, 'desk');
   await p2.goto(pollUrl);
@@ -326,6 +344,7 @@ try {
 
     // A new browser signs in as Bo with Discord, and someone not linked is told so.
     const fresh = await browser.newContext({ viewport: { width: 390, height: 844 }, timezoneId: 'America/Chicago' });
+    await fresh.addInitScript(() => localStorage.setItem('muster:tour', 'done'));
     const p7 = await fresh.newPage();
     watch(p7, 'fresh');
     await p7.goto(pollUrl);
@@ -406,6 +425,7 @@ try {
     });
     assert.equal(byName.status, 403, 'a name alone can’t answer');
     const only = await browser.newContext({ viewport: { width: 390, height: 844 }, timezoneId: 'America/Chicago' });
+    await only.addInitScript(() => localStorage.setItem('muster:tour', 'done'));
     const p8 = await only.newPage();
     watch(p8, 'discord-only');
     await p8.goto(`${BASE}/e/${locked.id}`);
