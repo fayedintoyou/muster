@@ -5,6 +5,8 @@ export interface Membership {
   personId?: string;
   token?: string;
   admin?: string;
+  /** The admin token is an officer's, which comes and goes with being an officer. */
+  officer?: boolean;
 }
 
 export interface RecentPoll {

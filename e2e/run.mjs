@@ -784,6 +784,44 @@ try {
   await p1.locator('.org-closed button:text("close to new answers")').waitFor();
   assert.equal((await joinPoll({ name: 'Ivy', cls: 'rogue', specs: ['combat'] })).status, 201, 'opened again');
 
+  // ---- Officers: picked by the maker from people linked to Discord ----
+  if (discord) {
+    const bo = (await (await fetch(`${BASE}/api/polls/${pollId}`)).json()).people.find((p) => p.name === 'Bo');
+    assert.ok(bo.discord, 'Bo is linked to Discord');
+    assert.deepEqual(await p1.locator('.org-officers li').count(), 0);
+    assert.equal(await p1.locator('select[aria-label="Make an officer"] option').allInnerTexts().then((o) => o.includes('Halric')), false, 'only people linked to Discord can be picked');
+    await p1.selectOption('select[aria-label="Make an officer"]', bo.id);
+    await p1.click('button:text("make officer")');
+    await p1.locator('.org-officers li', { hasText: 'Bo' }).waitFor();
+    await shot(p1, '12b-officers-phone');
+    // Bo, signed in on their own browser, organizes too: everything but picking officers and deleting.
+    await p2.reload();
+    await p2.locator('#tab-organizer').click();
+    assert.match(await p2.locator('.organizer .hint').first().innerText(), /you’re an officer/);
+    assert.equal(await p2.locator('.organizer :text("delete this poll"), .organizer :text("copy private link"), #org-officers').count(), 0, 'officers can’t delete or pick officers');
+    await p2.click('.org-closed button:text("close to new answers")');
+    await p2.locator('.org-status').waitFor();
+    await p2.click('.org-closed button:text("open to new answers")');
+    await p2.locator('.org-closed button:text("close to new answers")').waitFor();
+    const officerToken = await p2.evaluate((id) => JSON.parse(localStorage.getItem(`muster:poll:${id}`)).admin, pollId);
+    const asOfficer = (method, path, body) =>
+      fetch(`${BASE}/api/polls/${pollId}${path}`, {
+        method,
+        headers: { 'content-type': 'application/json', 'x-admin-token': officerToken },
+        body: body && JSON.stringify(body),
+      }).then((r) => r.status);
+    assert.equal(await asOfficer('DELETE', ''), 403, 'an officer can’t delete the poll');
+    assert.equal(await asOfficer('PUT', `/officers/${bo.id}`), 403, 'or pick officers');
+    // Stood down: the tab goes, and the token stops working.
+    await p1.locator('.org-officers li', { hasText: 'Bo' }).locator('button:text("stand down")').click();
+    await p1.locator('.org-officers li').waitFor({ state: 'detached' });
+    assert.equal(await asOfficer('PATCH', '', { closed: true }), 403, 'a stood-down officer can’t organize');
+    await p2.reload();
+    await p2.waitForSelector('.tabs');
+    await p2.waitForFunction((id) => !JSON.parse(localStorage.getItem(`muster:poll:${id}`)).admin, pollId);
+    assert.equal(await p2.locator('#tab-organizer').count(), 0, 'and the organizer tab goes');
+  }
+
   // ---- Specific dates, made on a desktop with the calendar, then edited ----
   const p5 = await desk.newPage();
   watch(p5, 'desk-dates');

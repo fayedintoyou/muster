@@ -9,13 +9,15 @@ import { PollForm } from './PollForm';
 import { useCopied } from './copy';
 import { store } from './store';
 
-// The organizer's tab, only for a browser that holds the poll's private link: who's answered and who
-// hasn't, helping someone who's locked out, renaming or removing people, closing the poll to new
-// answers, sharing, changing the poll and deleting it.
+// The organizer's tab, for a browser holding the poll's private link or an officer signed in with
+// Discord: who's answered and who hasn't, helping someone who's locked out, renaming or removing people,
+// closing the poll to new answers, sharing, and changing the poll. Only the maker's link picks officers
+// and deletes the poll.
 
 export function Organizer({
   state,
   admin,
+  maker,
   meId,
   onState,
   onPerson,
@@ -23,6 +25,8 @@ export function Organizer({
 }: {
   state: PollState;
   admin: string;
+  /** The maker's private link, rather than an officer's sign-in. */
+  maker: boolean;
   meId?: string;
   onState: (s: PollState) => void;
   onPerson: (person: Person) => void;
@@ -51,7 +55,11 @@ export function Organizer({
   return (
     <div className="organizer">
       <h2 className="panel-heading">Organizer</h2>
-      <p className="hint">Only you see this tab, because this browser holds the poll’s private link.</p>
+      <p className="hint">
+        {maker
+          ? 'Only organizers see this tab: you, because this browser holds the poll’s private link, and any officers you pick.'
+          : 'You see this tab because you’re an officer of this poll.'}
+      </p>
 
       <section className="org-section" aria-labelledby="org-answers">
         <h3 className="org-title" id="org-answers">
@@ -99,6 +107,7 @@ export function Organizer({
                 admin={admin}
                 person={p}
                 isMe={p.id === meId}
+                officer={state.officers.includes(p.id)}
                 onPerson={onPerson}
                 onState={onState}
                 onRemove={onRemove}
@@ -108,6 +117,8 @@ export function Organizer({
         )}
       </section>
 
+      {maker && <Officers state={state} admin={admin} onState={onState} />}
+
       <section className="org-section" aria-labelledby="org-share">
         <h3 className="org-title" id="org-share">
           Sharing
@@ -116,14 +127,18 @@ export function Organizer({
           <button type="button" className="button small" onClick={() => copy('link', pollLink)}>
             {copied === 'link' ? 'link copied' : 'copy link'}
           </button>
-          <button type="button" className="button small" onClick={() => copy('admin', adminLink)}>
-            {copied === 'admin' ? 'private link copied' : 'copy private link'}
-          </button>
+          {maker && (
+            <button type="button" className="button small" onClick={() => copy('admin', adminLink)}>
+              {copied === 'admin' ? 'private link copied' : 'copy private link'}
+            </button>
+          )}
         </p>
-        <p className="hint">
-          The private link makes whoever opens it an organizer too, on any device. Anyone with it can change or delete the
-          poll, so keep it to yourself.
-        </p>
+        {maker && (
+          <p className="hint">
+            The private link is yours: whoever opens it can do everything you can, on any device, including delete the
+            poll. To share the organizing, pick officers instead.
+          </p>
+        )}
       </section>
 
       <details className="org-section org-edit">
@@ -131,7 +146,7 @@ export function Organizer({
         <ChangePoll state={state} admin={admin} onState={onState} />
       </details>
 
-      <DeletePoll state={state} admin={admin} />
+      {maker && <DeletePoll state={state} admin={admin} />}
 
       {error && (
         <p className="error" role="alert">
@@ -147,6 +162,7 @@ function OrgPerson({
   admin,
   person: p,
   isMe,
+  officer,
   onPerson,
   onState,
   onRemove,
@@ -155,6 +171,7 @@ function OrgPerson({
   admin: string;
   person: Person;
   isMe: boolean;
+  officer: boolean;
   onPerson: (person: Person) => void;
   onState: (s: PollState) => void;
   onRemove: (id: string) => Promise<void>;
@@ -187,6 +204,7 @@ function OrgPerson({
       </span>
       <span className="person-meta org-meta">
         <ClassName cls={p.cls} specs={p.specs} spec={p.spec} />
+        {officer && <span className="org-officer">officer</span>}
         {p.level60 === false && <span className="levelling">levelling</span>}
         {Object.keys(p.marks).length === 0 && <span>no times yet</span>}
         {p.discord && <span>discord</span>}
@@ -268,6 +286,80 @@ function OrgPerson({
         </p>
       )}
     </li>
+  );
+}
+
+/** Officers organize too, signed in with Discord: everything here but picking officers and deleting the poll. */
+function Officers({ state, admin, onState }: { state: PollState; admin: string; onState: (s: PollState) => void }) {
+  const [pick, setPick] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const officers = state.officers.map((id) => state.people.find((p) => p.id === id)).filter((p): p is Person => Boolean(p));
+  const candidates = state.people.filter((p) => p.discord && !state.officers.includes(p.id));
+  const set = async (personId: string, officer: boolean) => {
+    setBusy(true);
+    setError('');
+    try {
+      onState(await api.officer(state.poll.id, personId, admin, officer));
+      setPick('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section className="org-section" aria-labelledby="org-officers">
+      <h3 className="org-title" id="org-officers">
+        Officers
+      </h3>
+      <p className="hint">
+        Officers can do everything here except pick officers or delete the poll. They sign in with Discord, so it works on
+        any device and you can take it back.
+      </p>
+      {officers.length > 0 && (
+        <ul className="org-officers">
+          {officers.map((p) => (
+            <li key={p.id}>
+              <span>{p.name}</span>
+              <button type="button" className="text-button" disabled={busy} onClick={() => void set(p.id, false)}>
+                stand down
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {candidates.length > 0 ? (
+        <form
+          className="org-actions"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (pick) void set(pick, true);
+          }}
+        >
+          <select aria-label="Make an officer" value={pick} onChange={(e) => setPick(e.target.value)}>
+            <option value="">pick someone…</option>
+            {candidates.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+          <button type="submit" className="button small" disabled={busy || !pick}>
+            make officer
+          </button>
+        </form>
+      ) : (
+        <p className="hint">
+          {officers.length ? 'Anyone else' : 'Anyone'} you’d make an officer needs to answer and link Discord first.
+        </p>
+      )}
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
+    </section>
   );
 }
 

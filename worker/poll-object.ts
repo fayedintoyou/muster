@@ -196,13 +196,76 @@ export class PollObject extends DurableObject<Env> {
       raid: this.kv.get<Raid>('raid') ?? null,
       teams: this.teams(),
       signups: this.signups(poll.tz),
+      officers: this.officers(),
       version: this.kv.get<number>('version') ?? 0,
     };
   }
 
-  private async adminOk(admin: string | undefined): Promise<boolean> {
+  private officers(): string[] {
+    return this.kv.get<string[]>('officers') ?? [];
+  }
+
+  /** The maker's private link: only it can delete the poll or pick officers. */
+  private async makerOk(admin: string | undefined): Promise<boolean> {
     const stored = this.kv.get<string>('admin');
     return Boolean(admin && stored && sameHash(await sha256(admin), stored));
+  }
+
+  /**
+   * The maker's private link, or an officer's organizer token. An officer's token stops working the moment
+   * they stop being an officer or unlink Discord.
+   */
+  private async adminOk(admin: string | undefined): Promise<boolean> {
+    if (!admin) return false;
+    const hash = await sha256(admin);
+    const stored = this.kv.get<string>('admin');
+    if (stored && sameHash(hash, stored)) return true;
+    const personId = this.kv.get<Record<string, string>>('officer-tokens')?.[hash];
+    if (!personId || !this.officers().includes(personId)) return false;
+    return Boolean(this.kv.get<StoredPerson>(`p:${personId}`)?.discord);
+  }
+
+  /** An officer, signed in as themselves with Discord linked, gets a token to organize with. */
+  async organize(token: string | undefined): Promise<Outcome<{ admin: string }>> {
+    if (!token) return fail(401, 'Sign in first.');
+    const tokenHash = await sha256(token);
+    const admin = randomToken();
+    const adminHash = await sha256(admin);
+    // No await from here on.
+    const person = this.people().find((p) => p.tokens.some((t) => sameHash(t, tokenHash)));
+    if (!person) return fail(403, 'Sign in first.');
+    if (!this.officers().includes(person.id)) return fail(403, 'You’re not an officer of this poll.');
+    if (!person.discord) return fail(403, 'Officers sign in with Discord. Link it first.');
+    const tokens = this.kv.get<Record<string, string>>('officer-tokens') ?? {};
+    // A few devices each; the oldest goes first.
+    const theirs = Object.keys(tokens).filter((h) => tokens[h] === person.id);
+    for (const old of theirs.slice(0, Math.max(0, theirs.length - (MAX_TOKENS - 1)))) delete tokens[old];
+    tokens[adminHash] = person.id;
+    this.kv.put('officer-tokens', tokens);
+    return { ok: true, admin };
+  }
+
+  /** The maker picks officers from people linked to Discord, or stands one down. */
+  async setOfficer(admin: string | undefined, personId: string, officer: boolean): Promise<Outcome<{ state: PollState }>> {
+    if (!(await this.makerOk(admin))) return fail(403, 'Only whoever made the poll can pick officers.');
+    const person = this.kv.get<StoredPerson>(`p:${personId}`);
+    const officers = this.officers().filter((id) => id !== personId);
+    if (officer) {
+      if (!person) return fail(404, 'That person isn’t in this poll any more.');
+      if (!person.discord) return fail(400, `${person.name} needs to link Discord before they can be an officer.`);
+      officers.push(personId);
+    } else {
+      this.dropOfficerTokens(personId);
+    }
+    this.kv.put('officers', officers);
+    this.bump();
+    return { ok: true, state: this.state()! };
+  }
+
+  private dropOfficerTokens(personId: string): void {
+    const tokens = this.kv.get<Record<string, string>>('officer-tokens');
+    if (!tokens) return;
+    this.kv.put('officer-tokens', Object.fromEntries(Object.entries(tokens).filter(([, id]) => id !== personId)));
   }
 
   async create(id: string, settings: PollSettings, adminHash: string): Promise<boolean> {
@@ -457,6 +520,10 @@ export class PollObject extends DurableObject<Env> {
     const mine = tokenHash !== undefined && person.tokens.some((t) => sameHash(t, tokenHash));
     if (!mine && !isAdmin) return fail(403, 'Only they, or whoever made the poll, can remove them.');
     this.kv.delete(`p:${personId}`);
+    if (this.officers().includes(personId)) {
+      this.kv.put('officers', this.officers().filter((id) => id !== personId));
+      this.dropOfficerTokens(personId);
+    }
     // And off any team they were on.
     const teams = this.teams();
     if (teams.some((t) => t.members.includes(personId))) {
@@ -640,7 +707,7 @@ export class PollObject extends DurableObject<Env> {
   }
 
   async destroy(admin: string | undefined): Promise<Outcome<object>> {
-    if (!(await this.adminOk(admin))) return fail(403, 'Only whoever made the poll can delete it.');
+    if (!(await this.makerOk(admin))) return fail(403, 'Only whoever made the poll can delete it.');
     await this.ctx.storage.deleteAll();
     return { ok: true };
   }
