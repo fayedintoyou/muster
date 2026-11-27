@@ -1026,3 +1026,35 @@ button.row-head:hover { color: var(--lamp); }
 @media (max-width: 560px) {
   .event-role { flex-basis: 100%; }
 }
+
+/* ---------- The first-time tour ---------- */
+
+/* The lit part: a clear window in a dimmed page. Clicks pass through, so each step can be tried. */
+.tour-spot {
+  position: fixed;
+  z-index: 60;
+  border-radius: 6px;
+  box-shadow: 0 0 0 2px var(--lamp), 0 0 0 9999px rgba(4, 3, 8, 0.62);
+  pointer-events: none;
+  /* It follows the page as it scrolls, frame by frame: sliding after it would lag and drift. */
+  animation: tour-in 0.2s ease-out;
+}
+@keyframes tour-in { from { opacity: 0; } }
+.tour-card {
+  position: fixed;
+  z-index: 61;
+  padding: 1rem 1.1rem 0.85rem;
+  border-radius: 6px;
+  border: 1px solid var(--line-strong);
+  background: var(--floor);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+.tour-card[data-narrow] { left: 16px; right: 16px; bottom: 16px; }
+.tour-count { margin: 0; font-family: var(--mono); font-size: 0.6875rem; letter-spacing: 0.05em; color: var(--muted); }
+.tour-title { margin: 0.25rem 0 0.4rem; font-size: 1.25rem; font-weight: 400; }
+.tour-body { margin: 0; color: #d7cfc3; font-size: 0.9375rem; }
+.tour-actions { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-top: 0.9rem; }
+.tour-step-buttons { display: flex; gap: 0.5rem; }
+@media (prefers-reduced-motion: reduce) {
+  .tour-spot { animation: none; }
+}

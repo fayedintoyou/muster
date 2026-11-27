@@ -12,6 +12,7 @@ import { RaidBanner } from './RaidBanner';
 import { TeamsPanel } from './TeamsPanel';
 import { MySignIn, discordMessage, discordReturn } from './SignIn';
 import { EventPanel, SignupButtons } from './Signups';
+import { ANSWER_TOUR, Tour, tourSeen } from './Tour';
 import { nextRaid } from '../core/raid';
 import { POLL_RAID, eventKey } from '../core/signup';
 import { slotLabel } from './GridFrame';
@@ -101,6 +102,9 @@ export function PollPage({ id }: { id: string }) {
   const [hovered, setHovered] = useState<string | null>(null);
   const [highlight, setHighlight] = useState<string | null>(null);
   const [copied, copy] = useCopied();
+  // The guided tour, offered once to someone who hasn't answered yet.
+  const [touring, setTouring] = useState(false);
+  const tourOffered = useRef(false);
 
   const version = useRef<number | undefined>(undefined);
   const mine = useRef<{ id?: string; updated: number }>({ id: membership.personId, updated: 0 });
@@ -195,6 +199,12 @@ export function PollPage({ id }: { id: string }) {
     const linking = fromDiscord?.outcome === 'linked' || fromDiscord?.outcome === 'taken';
     setTab(me && Object.keys(me.marks).length > 0 && !linking ? 'group' : 'mine');
   }, [state, me, tab, fromDiscord]);
+
+  useEffect(() => {
+    if (!state || me || tab !== 'mine' || tourOffered.current) return;
+    tourOffered.current = true;
+    if (!tourSeen()) setTouring(true);
+  }, [state, me, tab]);
 
   // Saving: answers save themselves half a second after the last change.
   const pending = useRef<Marks | null>(null);
@@ -390,7 +400,12 @@ export function PollPage({ id }: { id: string }) {
   const howTo = nothingMarked ? (
     <p className="hint how first">
       Press on a window and drag down to light up the hours you can play. Tap a night’s name to light the whole
-      night. Use <em>if needed</em> for hours you could do at a push.
+      night. Use <em>if needed</em> for hours you could do at a push.{' '}
+      {!me && (
+        <button type="button" className="text-button" onClick={() => setTouring(true)}>
+          show me how
+        </button>
+      )}
     </p>
   ) : (
     <p className="hint how">
@@ -838,6 +853,7 @@ export function PollPage({ id }: { id: string }) {
 
         {membership.admin && <AdminPanel state={state} admin={membership.admin} onState={applyState} />}
       </main>
+      {touring && <Tour steps={ANSWER_TOUR} onClose={() => setTouring(false)} />}
     </div>
   );
 }
