@@ -163,7 +163,8 @@ function OrgPerson({
   const [name, setName] = useState(p.name);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const locked = p.hasPassword || p.discord;
+  // Your own lock you change under your times; unlocking yourself here would sign you out.
+  const locked = (p.hasPassword || p.discord) && !isMe;
 
   const run = async (work: () => Promise<void>) => {
     setBusy(true);
