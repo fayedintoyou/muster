@@ -359,7 +359,7 @@ export function PollPage({ id }: { id: string }) {
     }
   };
 
-  const saveDetail = async (details: { cls?: string; specs?: string[]; spec?: string; note?: string }) => {
+  const saveDetail = async (details: { cls?: string; specs?: string[]; spec?: string; note?: string; level60?: boolean }) => {
     if (!me) return;
     if (details.note !== undefined && details.cls === undefined && details.note.trim() === me.note) return;
     if (details.spec !== undefined && details.spec.trim() === me.spec) return;
@@ -645,6 +645,15 @@ export function PollPage({ id }: { id: string }) {
                     />
                   </label>
                 )}
+                <label className="check my-level">
+                  <input
+                    type="checkbox"
+                    key={String(me.level60)}
+                    defaultChecked={me.level60 === true}
+                    onChange={(e) => void saveDetail({ level60: e.target.checked })}
+                  />
+                  <span>I’m level 60</span>
+                </label>
                 <label className="my-note">
                   <span className="muted">A note for the organizer</span>
                   <textarea

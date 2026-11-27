@@ -145,6 +145,7 @@ export function EventPanel({
       <span className="roster-name" style={classStyle(p?.cls ?? '')}>
         {p?.name ?? 'someone'}
         {id === me?.id && <span className="muted"> (you)</span>}
+        {p?.level60 === false && <span className="muted"> levelling</span>}
         {s?.status === 'late' && <span className="muted"> {s.late} min late</span>}
         {team && !members.has(id) && <span className="muted"> guild</span>}
       </span>
