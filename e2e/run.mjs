@@ -296,6 +296,7 @@ try {
       });
     assert.equal((await claimBo('nope')).status, 403, 'a wrong password is refused');
 
+    await p2.locator('.my-lock').screenshot({ path: `${SHOTS}04b-desk-link-discord.png` });
     discordUser = { id: '208123456789012345', username: 'bo_heals', global_name: 'Bo the Holy' };
     await p2.click('.my-lock button:text("link discord")');
     await p2.waitForSelector('.notice');
@@ -314,7 +315,7 @@ try {
     const p7 = await fresh.newPage();
     watch(p7, 'fresh');
     await p7.goto(pollUrl);
-    await p7.click('.join-locks button:text("sign in with discord")');
+    await p7.click('.join button:text("sign in with discord")');
     // Someone who has answered opens on everyone's times, as on any return.
     await p7.click('.tabs button:text("your times")');
     await p7.waitForSelector('.me-line');
@@ -324,7 +325,7 @@ try {
     await p7.click('.me-line button:text("not you?")');
     discordUser = { id: '308123456789012345', username: 'stranger' };
     await p7.click('.notice button:text("ok")');
-    await p7.click('.join-locks button:text("sign in with discord")');
+    await p7.click('.join button:text("sign in with discord")');
     await p7.waitForSelector('.notice:has-text("No one here is linked")');
     await shot(p7, '04e-phone-discord-not-linked');
     assert.equal(await p7.locator('.me-line').count(), 0);

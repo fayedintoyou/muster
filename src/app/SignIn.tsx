@@ -2,6 +2,7 @@ import { useId, useState } from 'react';
 import type { Person } from '../core/types';
 import { LIMITS } from '../core/validate';
 import { api } from './api';
+import { DiscordIcon } from './icons';
 
 // Keeping your answers yours: a password, a linked Discord account, or both. Without either, anyone who
 // types your name can carry on as you, which is fine for a lot of guilds.
@@ -42,12 +43,12 @@ export function DiscordButton({
   pollId,
   link,
   label,
-  className = 'button small',
+  small = false,
 }: {
   pollId: string;
   link?: { person: string; token?: string };
   label: string;
-  className?: string;
+  small?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -55,7 +56,7 @@ export function DiscordButton({
     <>
       <button
         type="button"
-        className={className}
+        className={`button discord${small ? ' small' : ''}`}
         disabled={busy}
         onClick={async () => {
           setBusy(true);
@@ -69,6 +70,7 @@ export function DiscordButton({
           }
         }}
       >
+        <DiscordIcon />
         {busy ? 'off to discord…' : label}
       </button>
       {error && (
@@ -157,7 +159,7 @@ export function MySignIn({
               unlink discord
             </button>
           ) : (
-            <DiscordButton pollId={pollId} link={{ person: me.id, token }} label="link discord" />
+            <DiscordButton pollId={pollId} link={{ person: me.id, token }} label="link discord" small />
           )}
           <button type="button" className="text-button" onClick={() => setEditing(true)}>
             {me.hasPassword ? 'change password' : 'lock with a password'}

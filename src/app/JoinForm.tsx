@@ -118,11 +118,7 @@ export function JoinForm({
         )}
         <div className="button-row">
           {claim.discord && (
-            <DiscordButton
-              pollId={poll.id}
-              label="sign in with discord"
-              className={claim.hasPassword ? 'button' : 'button primary'}
-            />
+            <DiscordButton pollId={poll.id} label="sign in with discord" />
           )}
           {(claim.hasPassword || !claim.discord) && (
             <button className="button primary" type="submit" disabled={busy || (claim.hasPassword && !password)}>
@@ -170,7 +166,11 @@ export function JoinForm({
             Add your name or in-game handle.
           </p>
         )}
-        <p className="hint">Answered already on another device? Use the same name to pick up where you left off.</p>
+        <p className="hint">
+          Answered already on another device? Use the same name to pick up where you left off, or sign in with
+          Discord if you linked it.
+        </p>
+        <DiscordButton pollId={poll.id} label="sign in with discord" small />
       </div>
       {poll.classes.length === 0 && poll.roles.length > 0 && (
         <fieldset className="field">
@@ -238,10 +238,6 @@ export function JoinForm({
           <button type="button" className="text-button" onClick={() => setLocking(true)}>
             lock my answers with a password
           </button>
-          <span>
-            Answered on another device with Discord linked?{' '}
-            <DiscordButton pollId={poll.id} label="sign in with discord" className="text-button" />
-          </span>
         </p>
       )}
       {error && (
