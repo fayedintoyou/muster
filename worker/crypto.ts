@@ -52,3 +52,35 @@ export function sameHash(a: string, b: string): boolean {
   for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return diff === 0;
 }
+
+function base64url(bytes: Uint8Array): string {
+  let binary = '';
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function hmacKey(secret: string): Promise<CryptoKey> {
+  return crypto.subtle.importKey('raw', new TextEncoder().encode(`muster-state:${secret}`), { name: 'HMAC', hash: 'SHA-256' }, false, [
+    'sign',
+  ]);
+}
+
+/** `payload.signature`, so a value that went out through someone's browser comes back unchanged. */
+export async function signed(payload: object, secret: string): Promise<string> {
+  const body = base64url(new TextEncoder().encode(JSON.stringify(payload)));
+  const mac = await crypto.subtle.sign('HMAC', await hmacKey(secret), new TextEncoder().encode(body));
+  return `${body}.${base64url(new Uint8Array(mac))}`;
+}
+
+export async function unsigned<T>(value: string, secret: string): Promise<T | null> {
+  const [body, mac] = value.split('.');
+  if (!body || !mac) return null;
+  const expected = await crypto.subtle.sign('HMAC', await hmacKey(secret), new TextEncoder().encode(body));
+  if (!sameHash(base64url(new Uint8Array(expected)), mac)) return null;
+  try {
+    const padded = body.replace(/-/g, '+').replace(/_/g, '/');
+    return JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(padded), (c) => c.charCodeAt(0)))) as T;
+  } catch {
+    return null;
+  }
+}

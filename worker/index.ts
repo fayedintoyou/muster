@@ -1,27 +1,13 @@
-import { PollObject, type Failure } from './poll-object';
+import { PollObject } from './poll-object';
 import { ID_PATTERN, TEAM_ID, randomId, randomToken, sha256 } from './crypto';
+import { discordCallback, discordStart } from './discord';
+import { auth, error, fromFailure, json } from './http';
 import { validateSettings } from '../src/core/validate';
 import { describePoll } from './describe';
 
 export { PollObject };
 
 const MAX_BODY = 64 * 1024;
-
-function json(body: unknown, status = 200, headers: HeadersInit = {}): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...headers },
-  });
-}
-
-function error(status: number, message: string, extra: object = {}): Response {
-  return json({ error: message, ...extra }, status);
-}
-
-function fromFailure(f: Failure): Response {
-  const { ok: _ok, status, error: message, ...extra } = f;
-  return error(status, message, extra);
-}
 
 async function readJson(request: Request): Promise<Record<string, unknown> | Response> {
   const length = Number(request.headers.get('content-length') ?? 0);
@@ -34,11 +20,6 @@ async function readJson(request: Request): Promise<Record<string, unknown> | Res
   } catch {
     return error(400, 'Expected JSON.');
   }
-}
-
-function auth(request: Request) {
-  const bearer = request.headers.get('authorization')?.match(/^Bearer\s+(\S+)$/i)?.[1];
-  return { token: bearer ?? undefined, admin: request.headers.get('x-admin-token') ?? undefined };
 }
 
 async function api(request: Request, env: Env, url: URL): Promise<Response> {
@@ -85,6 +66,13 @@ async function api(request: Request, env: Env, url: URL): Promise<Response> {
       return result.ok ? json({ ok: true }) : fromFailure(result);
     }
     return error(405, 'Method not allowed.');
+  }
+
+  if (parts[3] === 'discord' && parts.length === 4) {
+    if (method !== 'POST') return error(405, 'Method not allowed.');
+    const body = await readJson(request);
+    if (body instanceof Response) return body;
+    return discordStart(request, env, url, id, body);
   }
 
   if (parts[3] === 'raid' && parts.length === 4) {
@@ -195,6 +183,7 @@ export default {
     const url = new URL(request.url);
     try {
       if (url.pathname.startsWith('/api/')) return await api(request, env, url);
+      if (url.pathname === '/auth/discord/callback') return await discordCallback(request, env, url);
       if (url.pathname.startsWith('/e/') && (request.method === 'GET' || request.method === 'HEAD')) {
         return await pollPage(request, env, url);
       }

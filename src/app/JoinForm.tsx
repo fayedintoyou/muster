@@ -5,6 +5,7 @@ import { ApiError, api } from './api';
 import { store } from './store';
 import { ClassPicker } from './ClassPicker';
 import { RoleIcon } from './icons';
+import { DiscordButton } from './SignIn';
 
 // Who's answering, after they've marked their times: a name or in-game handle, their class and a spec or
 // two (which say what roles they bring), and a note if they like. Saving sends the times along with it.
@@ -30,7 +31,7 @@ export function JoinForm({
   const nameField = useRef<HTMLInputElement>(null);
   const [locking, setLocking] = useState(false);
   const [password, setPassword] = useState('');
-  const [claim, setClaim] = useState<{ name: string; hasPassword: boolean } | null>(null);
+  const [claim, setClaim] = useState<{ name: string; hasPassword: boolean; discord: boolean } | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -57,7 +58,7 @@ export function JoinForm({
       onJoined(result.person, result.token, result.state);
     } catch (err) {
       if (err instanceof ApiError && err.status === 409 && err.extra.exists) {
-        setClaim({ name: name.trim(), hasPassword: Boolean(err.extra.hasPassword) });
+        setClaim({ name: name.trim(), hasPassword: Boolean(err.extra.hasPassword), discord: Boolean(err.extra.discord) });
       } else {
         setError(err instanceof Error ? err.message : String(err));
       }
@@ -92,7 +93,9 @@ export function JoinForm({
       <form className="join" onSubmit={submit} noValidate>
         <h3 className="panel-title">{claim.name} has already answered</h3>
         <p className="lede-small">
-          If that’s you on another device, carry on where you left off. Otherwise pick a different name.
+          {claim.discord && !claim.hasPassword
+            ? `${claim.name} is linked to Discord. If that’s you, sign in with Discord to carry on where you left off. Otherwise pick a different name.`
+            : 'If that’s you on another device, carry on where you left off. Otherwise pick a different name.'}
           {marked > 0 && ' If you’d already marked times there, those are kept rather than the ones above.'}
         </p>
         {claim.hasPassword && (
@@ -114,9 +117,18 @@ export function JoinForm({
           </p>
         )}
         <div className="button-row">
-          <button className="button primary" type="submit" disabled={busy || (claim.hasPassword && !password)}>
-            {busy ? 'signing in…' : `yes, I’m ${claim.name}`}
-          </button>
+          {claim.discord && (
+            <DiscordButton
+              pollId={poll.id}
+              label="sign in with discord"
+              className={claim.hasPassword ? 'button' : 'button primary'}
+            />
+          )}
+          {(claim.hasPassword || !claim.discord) && (
+            <button className="button primary" type="submit" disabled={busy || (claim.hasPassword && !password)}>
+              {busy ? 'signing in…' : claim.discord ? 'sign in with the password' : `yes, I’m ${claim.name}`}
+            </button>
+          )}
           <button
             type="button"
             className="button"
@@ -222,10 +234,14 @@ export function JoinForm({
           <p className="hint">Without one, anyone who types your name can change your answers.</p>
         </div>
       ) : (
-        <p className="hint">
+        <p className="hint join-locks">
           <button type="button" className="text-button" onClick={() => setLocking(true)}>
             lock my answers with a password
           </button>
+          <span>
+            Answered on another device with Discord linked?{' '}
+            <DiscordButton pollId={poll.id} label="sign in with discord" className="text-button" />
+          </span>
         </p>
       )}
       {error && (

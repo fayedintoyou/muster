@@ -76,9 +76,11 @@ teams on its "teams" tab (name, size and make-up, people picked from everyone wh
 has its own best times, read from its members' answers only, and locks in its own raid. People on two
 teams whose raids overlap are flagged, and everyone on a team sees a line for it at the top of the poll.
 
-**Who is who.** Until Discord sign-in, a member claims themselves by name with a private token, as poll
-answers do now. Discord sign-in later ties that member to their Discord account, and then muster can @
-them.
+**Who is who.** A member claims themselves by name, with a private token kept by each browser. Done
+(PR #20): anyone can lock their answers with a password, change it or remove it, and link their Discord
+account. Once linked, "sign in with Discord" makes any device them, and a name alone no longer does.
+Ten wrong passwords in a row make claiming that person wait 15 minutes. The bot will use the same
+link to @ people and match their button presses to their answers.
 
 ## Matching Raid-Helper: what the guild relies on
 
@@ -191,7 +193,7 @@ until the bot is ready.
 **Launch weeks: the bot.**
 4. Set up a Discord app; Faye creates it and pastes its keys in privately. Then the `/muster raid` card
    with sign-up buttons, the edited roster card and recurring posts.
-5. Sign in with Discord, linked to people's existing answers.
+5. Sign in with Discord, linked to people's existing answers. Done early (PR #20).
 6. Reminders, and the officer moving people between seated and standby.
 
 **Then:**

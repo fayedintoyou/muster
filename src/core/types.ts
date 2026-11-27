@@ -54,6 +54,8 @@ export interface Person {
   note: string;
   marks: Marks;
   hasPassword: boolean;
+  /** Linked to a Discord account, so they sign in with Discord. */
+  discord: boolean;
   updated: number;
 }
 

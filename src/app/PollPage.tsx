@@ -10,6 +10,7 @@ import { Wordmark, navigate } from './App';
 import { BestTimes } from './BestTimes';
 import { RaidBanner } from './RaidBanner';
 import { TeamsPanel } from './TeamsPanel';
+import { MySignIn, discordMessage, discordReturn } from './SignIn';
 import { slotLabel } from './GridFrame';
 import { HeatGrid } from './HeatGrid';
 import { JoinForm } from './JoinForm';
@@ -34,10 +35,18 @@ const IDLE_MS = 5 * 60_000;
 export function PollPage({ id }: { id: string }) {
   const [state, setState] = useState<PollState | null>(null);
   const [failure, setFailure] = useState<ApiError | null>(null);
+  // Back from Discord: signed in, linked, or why not. Read once, before the hash is cleared.
+  const [fromDiscord] = useState(discordReturn);
+  const [discordNote, setDiscordNote] = useState(() => (fromDiscord ? discordMessage(fromDiscord) : ''));
   const [membership, setMembershipState] = useState<Membership>(() => {
     // The maker's private link, /e/<id>#admin=<token>, makes this browser able to change the poll too.
     const fromLink = /^#admin=([\w-]{16,})$/.exec(location.hash)?.[1];
     const saved = store.membership(id);
+    if (fromDiscord?.outcome === 'signedin' && fromDiscord.person && fromDiscord.token) {
+      const next = { ...saved, personId: fromDiscord.person, token: fromDiscord.token };
+      store.setMembership(id, next);
+      return next;
+    }
     if (!fromLink) return saved;
     history.replaceState(null, '', location.pathname);
     const next = { ...saved, admin: fromLink };
@@ -156,8 +165,10 @@ export function PollPage({ id }: { id: string }) {
 
   useEffect(() => {
     if (!state || tab) return;
-    setTab(me && Object.keys(me.marks).length > 0 ? 'group' : 'mine');
-  }, [state, me, tab]);
+    // Back from linking Discord, you land where you started it.
+    const linking = fromDiscord?.outcome === 'linked' || fromDiscord?.outcome === 'taken';
+    setTab(me && Object.keys(me.marks).length > 0 && !linking ? 'group' : 'mine');
+  }, [state, me, tab, fromDiscord]);
 
   // Saving: answers save themselves half a second after the last change.
   const pending = useRef<Marks | null>(null);
@@ -389,6 +400,14 @@ export function PollPage({ id }: { id: string }) {
             </span>
           </p>
           {poll.notes && <p className="poll-notes">{poll.notes}</p>}
+          {discordNote && (
+            <p className="notice" role="status">
+              {discordNote}{' '}
+              <button type="button" className="text-button" onClick={() => setDiscordNote('')}>
+                ok
+              </button>
+            </p>
+          )}
           {state.teams
             .filter((t) => t.raid && me && t.members.includes(me.id))
             .map((t) => (
@@ -563,6 +582,18 @@ export function PollPage({ id }: { id: string }) {
                     onBlur={(e) => void saveDetail({ note: e.target.value })}
                   />
                 </label>
+                <MySignIn
+                  pollId={id}
+                  me={me}
+                  token={membership.token}
+                  onPerson={(person) => {
+                    mine.current = { id: person.id, updated: person.updated };
+                    setState(
+                      (prev) =>
+                        prev && { ...prev, people: prev.people.map((p) => (p.id === person.id ? { ...person, marks: p.marks } : p)) },
+                    );
+                  }}
+                />
                 {!nothingMarked && (
                   <div className="next-step">
                     <p>Your times save automatically.</p>
