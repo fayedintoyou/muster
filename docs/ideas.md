@@ -40,9 +40,44 @@ up again every week. Muster starts earlier and asks less of people:
 
 - **The December 9 countdown** on the home page (PR #11).
 - **Server time beside every time**, Central by default (PR #13).
+- **Lock it in** (PR #17): a best time becomes the raid, with the banner, countdown, the nights coming up,
+  calling single nights off, a calendar file and the Discord message.
 - **Raid size and honest seating** (PR #14). A poll can be for 10, 20 or 40, with tanks and healers.
   Best times seats each person once, puts people who are sure before "if needed" ones, and says what a
   window still needs and who the lineup counts on.
+
+## Guilds, teams and events
+
+A guild runs more than one raid team: two 10s, a 20 and a 40, an alt run. So muster's shape grows from
+"one poll" into:
+
+- **Guild**: one Discord server. It holds the members, the teams, the settings and the officers.
+- **Member**: one person in the guild, with a main and any alts (class and specs each), their usual free
+  hours and any dated absences. Each person answers once, for the whole guild, not once for each team.
+- **Team**: a named group, such as "Thursday 10" or "Alt Onyxia". It has a roster of members, a raid size
+  and make-up, and a schedule found with best times and then locked in. Someone can be on more than
+  one team; muster warns the officer when a person's teams clash.
+- **Event**: one raid on one night. Most come from a team's schedule, one a week; officers can also make
+  one-off events, such as a pug night or an attunement run. Each event has its own sign-ups, roster and
+  Discord post.
+
+**Signing up: team first, but open.** Anyone in the guild can sign up for any event. The event's team
+gets first claim on the seats:
+1. Team members who sign in are seated first, in a role they play, as in PR #14.
+2. Others who sign in fill the seats left, in the order they signed up, then go on standby.
+3. An officer can move anyone between seated and standby, either way.
+
+So a team's regulars are never bumped by an outsider, and a team that's short fills itself from the
+guild without anyone having to ask. A team can also be set to "team only" for a closed run.
+
+**Today's polls become a team's way to find its time.** A poll stays usable on its own for a quick
+"when can we all play?". A team's best times read its roster's answers, over the hours that team raids.
+Locking in a time sets the team's schedule. Existing polls and answers keep working: a poll can be turned
+into a team, and its people into members.
+
+**Who is who.** Until Discord sign-in, a member claims themselves by name with a private token, as poll
+answers do now. Discord sign-in later ties that member to their Discord account, and then muster can @
+them.
 
 ## Matching Raid-Helper: what the guild relies on
 
@@ -143,11 +178,12 @@ web requests, so no bot program has to keep running.
 ## The order
 
 **Before December 9: one complete path for Barrow Deeps, on the web.**
-1. Lock in a date and time on the poll: the banner, the countdown, a calendar file, move and cancel, and
-   the Discord timestamp to copy.
-2. Signing up for each raid on the page (in, late with a time, tentative, out), with the roster and
-   standby. "Usually free" comes from the poll.
-3. Dated absences.
+1. Lock in a time. Done (PR #17).
+2. A guild, its members and its teams, on the web. The pilot poll becomes the first team; officers use a
+   private link.
+3. Events from each team's schedule, plus one-off events, with sign-ups (in, late with a time, tentative,
+   out) and the roster: team first, then the guild, then standby. "Usually free" fills in a first guess.
+4. Dated absences, on the member, so they apply to every team.
 
 The guild raids on this from launch day: raid posts go up as a copied Discord message with a link
 until the bot is ready.
@@ -182,7 +218,9 @@ them:
 | Who counts as the raid pool for "hasn't answered" | everyone who has answered the poll |
 | Groups for a 40 | arranged by hand; a guild can save a layout as its template |
 | Server time zone | Central |
-| Raid size, tanks and healers | 10, 20 or 40, with the usual make-up, editable per raid |
+| Raid size, tanks and healers | 10, 20 or 40, with the usual make-up, set per team and per event |
+| Teams | as many as the guild wants; each open to the guild after its own members, or team only |
+| Where each team's events are posted | the guild's raid channel, or a channel per team |
 
 ## Pilot
 
