@@ -269,7 +269,7 @@ try {
   await p2.mouse.up();
   // Saving without a name says so and puts the cursor in the name field, rather than doing nothing.
   await p2.click('button:text("save my times")');
-  assert.match(await p2.locator('#join-name-missing').innerText(), /Add your name/, 'saving without a name says what’s missing');
+  assert.match(await p2.locator('#join-name-missing').innerText(), /Add your character’s name/, 'saving without a name says what’s missing');
   assert.equal(await p2.evaluate(() => document.activeElement?.id), 'join-name', 'and focuses the name field');
   assert.equal(await p2.locator('.me-line').count(), 0, 'nothing is saved without a name');
   await p2.fill('#join-name', 'Bo');
@@ -345,7 +345,8 @@ try {
     // Not in the poll yet: the join form says so, with their Discord name filled in, and saving links it.
     await p7.waitForSelector('.discord-joined');
     assert.match(await p7.locator('.discord-joined').innerText(), /Signed in with Discord as stranger/);
-    assert.equal(await p7.locator('#join-name').inputValue(), 'stranger', 'the name comes from Discord');
+    assert.equal(await p7.locator('.join button:text("lock my answers with a password")').count(), 0, 'Discord is the lock');
+    await p7.fill('#join-name', 'Strangerdk');
     assert.equal(await p7.locator('.join button:text("sign in with discord")').count(), 0, 'no second sign-in button');
     await shot(p7, '04e-phone-discord-not-linked');
     await p7.click('.join .class-chip:text-is("mage")');
@@ -416,6 +417,7 @@ try {
     await p8.click('.join button:text("sign in with discord")');
     await p8.waitForSelector('.discord-joined');
     assert.deepEqual(await marks(p8, 'w4'), { 'w4/1200': 2 }, 'the times marked before Discord are kept');
+    await p8.fill('#join-name', 'Zedfrost');
     await p8.click('.join .class-chip:text-is("mage")');
     await p8.click('.join .class-chip:text-is("frost")');
     await p8.click('button:text("save my times")');

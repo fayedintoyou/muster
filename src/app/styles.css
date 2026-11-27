@@ -522,7 +522,7 @@ option { background: var(--wall); color: var(--ink); }
 .calendar-day[aria-pressed='true'] { background: var(--lamp); color: var(--night); font-weight: 500; }
 
 .recent { margin-top: 3.5rem; max-width: 40rem; }
-.join { display: grid; gap: 1.15rem; max-width: 34rem; }
+.join { display: grid; gap: 1.15rem; max-width: 34rem; scroll-margin-top: 4rem; }
 .join .panel-title { margin: 0; }
 .join .hint { margin-top: 0; }
 .join .field .hint { margin-top: 0.2rem; }

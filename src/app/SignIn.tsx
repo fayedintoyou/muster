@@ -175,9 +175,12 @@ export function MySignIn({
           ) : (
             <DiscordButton pollId={pollId} link={{ person: me.id, token }} label="link discord" small />
           )}
-          <button type="button" className="text-button" onClick={() => setEditing(true)}>
-            {me.hasPassword ? 'change password' : 'lock with a password'}
-          </button>
+          {/* Linked to Discord is locked already; a password only stays to be changed or removed. */}
+          {(me.hasPassword || !me.discord) && (
+            <button type="button" className="text-button" onClick={() => setEditing(true)}>
+              {me.hasPassword ? 'change password' : 'lock with a password'}
+            </button>
+          )}
           {me.hasPassword && (
             <button type="button" className="text-button" disabled={busy} onClick={() => void save({ password: '' })}>
               remove password
