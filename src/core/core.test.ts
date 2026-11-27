@@ -26,6 +26,7 @@ const weekly: PollSettings = {
   size: 0,
   makeup: {},
   discordOnly: false,
+  closed: false,
   roles: ['tank', 'healer', 'dps'],
   classes: [],
   length: 90,

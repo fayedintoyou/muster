@@ -154,7 +154,14 @@ async function api(request: Request, env: Env, url: URL): Promise<Response> {
   }
 
   const personId = parts[4];
-  if (parts.length !== 5 || !ID_PATTERN.test(personId)) return error(404, 'Not found.');
+  if (!ID_PATTERN.test(personId)) return error(404, 'Not found.');
+  // /people/<id>/unlock: the organizer helping someone locked out.
+  if (parts.length === 6 && parts[5] === 'unlock') {
+    if (method !== 'POST') return error(405, 'Method not allowed.');
+    const result = await poll.resetLock(auth(request).admin, personId);
+    return result.ok ? json(result.state) : fromFailure(result);
+  }
+  if (parts.length !== 5) return error(404, 'Not found.');
   if (method === 'PUT') {
     const body = await readJson(request);
     if (body instanceof Response) return body;

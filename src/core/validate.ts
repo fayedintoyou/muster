@@ -151,6 +151,7 @@ export function validateSettings(input: unknown, now = Date.now()): Result<PollS
   const { size, makeup } = raid.value;
 
   const discordOnly = raw.discordOnly === true;
+  const closed = raw.closed === true;
 
   return ok({
     title,
@@ -165,6 +166,7 @@ export function validateSettings(input: unknown, now = Date.now()): Result<PollS
     size,
     makeup,
     discordOnly,
+    closed,
     roles: roles.value,
     classes: classes.value,
     length,

@@ -171,6 +171,11 @@ export function JoinForm({
   return (
     <form className="join" ref={formRef} onSubmit={submit} noValidate>
       <h3 className="panel-title">Then, who’s this?</h3>
+      {poll.closed && (
+        <p className="my-lock-ask">
+          This poll is closed to new answers. Answered already? Use the same character name to change yours.
+        </p>
+      )}
       {discord && (
         <p className="discord-joined" role="status">
           <DiscordIcon />

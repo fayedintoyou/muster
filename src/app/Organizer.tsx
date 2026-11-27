@@ -1,0 +1,334 @@
+import { useState } from 'react';
+import type { Person, PollState } from '../core/types';
+import { LIMITS } from '../core/validate';
+import { plural } from '../core/format';
+import { api } from './api';
+import { navigate } from './App';
+import { ClassName } from './ClassPicker';
+import { PollForm } from './PollForm';
+import { useCopied } from './copy';
+import { store } from './store';
+
+// The organizer's tab, only for a browser that holds the poll's private link: who's answered and who
+// hasn't, helping someone who's locked out, renaming or removing people, closing the poll to new
+// answers, sharing, changing the poll and deleting it.
+
+export function Organizer({
+  state,
+  admin,
+  meId,
+  onState,
+  onPerson,
+  onRemove,
+}: {
+  state: PollState;
+  admin: string;
+  meId?: string;
+  onState: (s: PollState) => void;
+  onPerson: (person: Person) => void;
+  onRemove: (id: string) => Promise<void>;
+}) {
+  const { poll, people } = state;
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [copied, copy] = useCopied();
+  const quiet = people.filter((p) => Object.keys(p.marks).length === 0);
+  const pollLink = `${location.origin}/e/${poll.id}`;
+  const adminLink = `${pollLink}#admin=${admin}`;
+
+  const run = async (work: () => Promise<void>) => {
+    setBusy(true);
+    setError('');
+    try {
+      await work();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="organizer">
+      <h2 className="panel-heading">Organizer</h2>
+      <p className="hint">Only you see this tab, because this browser holds the poll’s private link.</p>
+
+      <section className="org-section" aria-labelledby="org-answers">
+        <h3 className="org-title" id="org-answers">
+          Answers
+        </h3>
+        <p className="org-count">
+          {people.length === 0
+            ? 'No one has answered yet.'
+            : `${plural(people.length - quiet.length, 'person', 'people')} with times${quiet.length ? `, ${quiet.length} still to mark any` : ''}.`}
+        </p>
+        {quiet.length > 0 && (
+          <p className="hint">
+            No times yet: {quiet.map((p) => p.name).join(', ')}.
+          </p>
+        )}
+        <div className="org-closed">
+          <p className={poll.closed ? 'org-status' : 'muted'}>
+            {poll.closed
+              ? 'Closed to new answers. People who’ve answered can still change theirs.'
+              : 'Open: anyone with the link can answer.'}
+          </p>
+          <button
+            type="button"
+            className="button small"
+            disabled={busy}
+            onClick={() => void run(async () => onState(await api.update(poll.id, admin, { closed: !poll.closed })))}
+          >
+            {poll.closed ? 'open to new answers' : 'close to new answers'}
+          </button>
+        </div>
+      </section>
+
+      <section className="org-section" aria-labelledby="org-people">
+        <h3 className="org-title" id="org-people">
+          People
+        </h3>
+        {people.length === 0 ? (
+          <p className="hint">Share the link to invite people.</p>
+        ) : (
+          <ul className="org-people">
+            {people.map((p) => (
+              <OrgPerson
+                key={p.id}
+                pollId={poll.id}
+                admin={admin}
+                person={p}
+                isMe={p.id === meId}
+                onPerson={onPerson}
+                onState={onState}
+                onRemove={onRemove}
+              />
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="org-section" aria-labelledby="org-share">
+        <h3 className="org-title" id="org-share">
+          Sharing
+        </h3>
+        <p className="org-actions">
+          <button type="button" className="button small" onClick={() => copy('link', pollLink)}>
+            {copied === 'link' ? 'link copied' : 'copy link'}
+          </button>
+          <button type="button" className="button small" onClick={() => copy('admin', adminLink)}>
+            {copied === 'admin' ? 'private link copied' : 'copy private link'}
+          </button>
+        </p>
+        <p className="hint">
+          The private link makes whoever opens it an organizer too, on any device. Anyone with it can change or delete the
+          poll, so keep it to yourself.
+        </p>
+      </section>
+
+      <details className="org-section org-edit">
+        <summary>Change days, times and more</summary>
+        <ChangePoll state={state} admin={admin} onState={onState} />
+      </details>
+
+      <DeletePoll state={state} admin={admin} />
+
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function OrgPerson({
+  pollId,
+  admin,
+  person: p,
+  isMe,
+  onPerson,
+  onState,
+  onRemove,
+}: {
+  pollId: string;
+  admin: string;
+  person: Person;
+  isMe: boolean;
+  onPerson: (person: Person) => void;
+  onState: (s: PollState) => void;
+  onRemove: (id: string) => Promise<void>;
+}) {
+  const [doing, setDoing] = useState<'rename' | 'unlock' | 'remove' | null>(null);
+  const [name, setName] = useState(p.name);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const locked = p.hasPassword || p.discord;
+
+  const run = async (work: () => Promise<void>) => {
+    setBusy(true);
+    setError('');
+    try {
+      await work();
+      setDoing(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <li>
+      <span className="org-name">
+        {p.name}
+        {isMe && <span className="muted"> (you)</span>}
+      </span>
+      <span className="person-meta org-meta">
+        <ClassName cls={p.cls} specs={p.specs} spec={p.spec} />
+        {p.level60 === false && <span className="levelling">levelling</span>}
+        {Object.keys(p.marks).length === 0 && <span>no times yet</span>}
+        {p.discord && <span>discord</span>}
+        {p.hasPassword && <span>password</span>}
+      </span>
+      {doing === 'rename' ? (
+        <form
+          className="org-do"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void run(async () => onPerson((await api.save(pollId, p.id, { admin }, { name })).person));
+          }}
+        >
+          <input
+            aria-label={`New name for ${p.name}`}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={LIMITS.name}
+            autoFocus
+          />
+          <button type="submit" className="button small primary" disabled={busy || !name.trim()}>
+            rename
+          </button>
+          <button type="button" className="text-button" onClick={() => setDoing(null)}>
+            cancel
+          </button>
+        </form>
+      ) : doing === 'unlock' ? (
+        <p className="org-do">
+          Take off {p.name}’s {p.hasPassword && p.discord ? 'password and Discord link' : p.hasPassword ? 'password' : 'Discord link'}{' '}
+          and sign them out everywhere? Then they sign back in by typing their name.{' '}
+          <button
+            type="button"
+            className="button small"
+            disabled={busy}
+            onClick={() => void run(async () => onState(await api.unlock(pollId, p.id, admin)))}
+          >
+            unlock
+          </button>{' '}
+          <button type="button" className="text-button" onClick={() => setDoing(null)}>
+            cancel
+          </button>
+        </p>
+      ) : doing === 'remove' ? (
+        <p className="org-do">
+          Remove {p.name} and their answers?{' '}
+          <button type="button" className="button small danger" disabled={busy} onClick={() => void run(() => onRemove(p.id))}>
+            remove
+          </button>{' '}
+          <button type="button" className="text-button" onClick={() => setDoing(null)}>
+            keep
+          </button>
+        </p>
+      ) : (
+        <span className="org-person-actions">
+          <button
+            type="button"
+            className="text-button"
+            onClick={() => {
+              setName(p.name);
+              setDoing('rename');
+            }}
+          >
+            rename
+          </button>
+          {locked && (
+            <button type="button" className="text-button" onClick={() => setDoing('unlock')}>
+              unlock
+            </button>
+          )}
+          <button type="button" className="text-button danger" onClick={() => setDoing('remove')}>
+            remove
+          </button>
+        </span>
+      )}
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
+    </li>
+  );
+}
+
+function ChangePoll({ state, admin, onState }: { state: PollState; admin: string; onState: (s: PollState) => void }) {
+  const [saved, setSaved] = useState(false);
+  const answered = state.people.some((p) => Object.keys(p.marks).length > 0);
+  return (
+    <PollForm
+      key={state.poll.updated}
+      initial={state.poll}
+      editing
+      answered={answered}
+      submitLabel={saved ? 'saved' : 'save changes'}
+      busyLabel="saving…"
+      onSubmit={async (settings) => {
+        const next = await api.update(state.poll.id, admin, settings);
+        onState(next);
+        store.remember(next.poll, true);
+        setSaved(true);
+        window.setTimeout(() => setSaved(false), 2000);
+      }}
+    />
+  );
+}
+
+function DeletePoll({ state, admin }: { state: PollState; admin: string }) {
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState('');
+  return (
+    <div className="danger-zone">
+      {deleting ? (
+        <p>
+          Delete “{state.poll.title}” and everyone’s answers?{' '}
+          <button
+            type="button"
+            className="button small danger"
+            onClick={async () => {
+              try {
+                await api.destroy(state.poll.id, admin);
+                store.forget(state.poll.id);
+                navigate('/');
+              } catch (err) {
+                setError(err instanceof Error ? err.message : String(err));
+              }
+            }}
+          >
+            delete it
+          </button>{' '}
+          <button type="button" className="button small" onClick={() => setDeleting(false)}>
+            keep it
+          </button>
+        </p>
+      ) : (
+        <button type="button" className="text-button danger" onClick={() => setDeleting(true)}>
+          delete this poll
+        </button>
+      )}
+      {error && (
+        <p className="error" role="alert">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
