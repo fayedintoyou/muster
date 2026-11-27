@@ -330,8 +330,10 @@ try {
     watch(p7, 'fresh');
     await p7.goto(pollUrl);
     await p7.click('.join button:text("sign in with discord")');
+    // Back from Discord first: until then the old page's "mark your times" tab matches too.
+    await p7.waitForSelector('.notice:has-text("Signed in with Discord")');
     // Someone who has answered opens on everyone's times, as on any return.
-    await p7.click('.tabs button:text("your times")');
+    await p7.click('.tabs button:text-is("your times")');
     await p7.waitForSelector('.me-line');
     assert.match(await p7.locator('.me-line').innerText(), /Answering as Bo/, 'Discord signs a new device in as Bo');
     assert.match(await p7.locator('.notice').innerText(), /Signed in with Discord/);
