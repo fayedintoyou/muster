@@ -6,7 +6,7 @@ export class ApiError extends Error {
   constructor(
     message: string,
     readonly status: number,
-    readonly extra: { exists?: boolean; hasPassword?: boolean } = {},
+    readonly extra: { exists?: boolean; hasPassword?: boolean; discord?: boolean } = {},
   ) {
     super(message);
   }
@@ -98,7 +98,17 @@ export const api = {
     id: string,
     personId: string,
     auth: { token?: string; admin?: string },
-    input: { marks?: Marks; roles?: string[]; cls?: string; specs?: string[]; spec?: string; note?: string; name?: string; password?: string },
+    input: {
+      marks?: Marks;
+      roles?: string[];
+      cls?: string;
+      specs?: string[];
+      spec?: string;
+      note?: string;
+      name?: string;
+      password?: string;
+      discord?: null;
+    },
     keepalive = false,
   ) {
     return call<{ person: Person; version: number }>(`/api/polls/${id}/people/${personId}`, {
@@ -106,6 +116,14 @@ export const api = {
       ...auth,
       keepalive,
       body: JSON.stringify(input),
+    });
+  },
+  /** Where to send the browser to sign in with Discord, or with a person and their token, to link it. */
+  discord(id: string, link?: { person: string; token?: string }) {
+    return call<{ url: string }>(`/api/polls/${id}/discord`, {
+      method: 'POST',
+      token: link?.token,
+      body: JSON.stringify(link ? { person: link.person } : {}),
     });
   },
   remove(id: string, personId: string, auth: { token?: string; admin?: string }) {

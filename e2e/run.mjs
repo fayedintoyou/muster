@@ -4,6 +4,7 @@
 // Screenshots land in e2e/shots/. Needs a built UI (npm run build) and Chrome (CHROME=/path/to/chrome).
 
 import { spawn } from 'node:child_process';
+import { createServer } from 'node:http';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -21,11 +22,45 @@ mkdirSync(SHOTS, { recursive: true });
 let BASE = process.env.BASE;
 let server;
 let store;
+// A stand-in for Discord's OAuth2, which says whoever `discordUser` is when the Worker asks.
+let discord;
+let discordUser = null;
 if (!BASE) {
+  discord = createServer((req, res) => {
+    const url = new URL(req.url, 'http://x');
+    if (url.pathname === '/oauth2/authorize') {
+      const back = new URL(url.searchParams.get('redirect_uri'));
+      back.searchParams.set('code', discordUser.id);
+      back.searchParams.set('state', url.searchParams.get('state'));
+      res.writeHead(302, { location: back.toString() }).end();
+    } else if (url.pathname === '/api/v10/oauth2/token' && req.method === 'POST') {
+      let body = '';
+      req.on('data', (d) => (body += d));
+      req.on('end', () => {
+        const code = new URLSearchParams(body).get('code');
+        res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ access_token: `at-${code}` }));
+      });
+    } else if (url.pathname === '/api/v10/users/@me') {
+      const id = req.headers.authorization?.replace('Bearer at-', '');
+      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ ...discordUser, id }));
+    } else {
+      res.writeHead(404).end();
+    }
+  });
+  await new Promise((resolve) => discord.listen(0, '127.0.0.1', resolve));
+
   store = mkdtempSync(join(tmpdir(), 'muster-e2e-'));
   const port = 8790 + Math.floor(Math.random() * 200);
   BASE = `http://127.0.0.1:${port}`;
-  server = spawn('npx', ['wrangler', 'dev', '--port', String(port), '--ip', '127.0.0.1', '--persist-to', store], {
+  const discordVars = [
+    '--var',
+    `DISCORD_ORIGIN:http://127.0.0.1:${discord.address().port}`,
+    '--var',
+    'DISCORD_CLIENT_SECRET:e2e-secret',
+    '--var',
+    `SITE_ORIGIN:${BASE}`,
+  ];
+  server = spawn('npx', ['wrangler', 'dev', '--port', String(port), '--ip', '127.0.0.1', '--persist-to', store, ...discordVars], {
     env: { ...process.env, WRANGLER_SEND_METRICS: 'false' },
     stdio: ['ignore', 'pipe', 'pipe'],
     // Its own process group, so stopping it stops wrangler and workerd under npx too.
@@ -246,6 +281,75 @@ try {
   const bo = { ...(await marks(p2, 'w2')), ...(await marks(p2, 'w3')), ...(await marks(p2, 'w4')) };
   assert.equal(Object.keys(bo).length, 18, 'mouse drag filled a 3×6 rectangle');
 
+  // ---- Keeping answers yours: a password, then Discord ----
+  if (discord) {
+    assert.match(await p2.locator('.my-lock').innerText(), /Anyone who types your name/, 'unlocked to start with');
+    await p2.click('.my-lock button:text("lock with a password")');
+    await p2.fill('.my-lock input[type="password"]', 'healz4days');
+    await p2.click('.my-lock button:text("save password")');
+    await p2.waitForSelector('.my-lock :text("locked with a password")');
+    const claimBo = (password) =>
+      fetch(`${BASE}/api/polls/${pollId}/people`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name: 'Bo', claim: true, password }),
+      });
+    assert.equal((await claimBo('nope')).status, 403, 'a wrong password is refused');
+
+    discordUser = { id: '208123456789012345', username: 'bo_heals', global_name: 'Bo the Holy' };
+    await p2.click('.my-lock button:text("link discord")');
+    await p2.waitForSelector('.notice');
+    assert.match(await p2.locator('.notice').innerText(), /Linked to Discord as Bo the Holy/, 'back from Discord, linked');
+    assert.equal(new URL(p2.url()).hash, '', 'and the hash is cleared');
+    assert.match(await p2.locator('.my-lock').innerText(), /password, and linked to Discord/);
+    await shot(p2, '04c-desk-locked');
+    await p2.click('.my-lock button:text("remove password")');
+    await p2.waitForSelector('.my-lock :text("linked to Discord: sign in")');
+    const byName = await claimBo(undefined);
+    assert.equal(byName.status, 401, 'linked to Discord, a name alone no longer signs in');
+    assert.equal((await byName.json()).discord, true);
+
+    // A new browser signs in as Bo with Discord, and someone not linked is told so.
+    const fresh = await browser.newContext({ viewport: { width: 390, height: 844 }, timezoneId: 'America/Chicago' });
+    const p7 = await fresh.newPage();
+    watch(p7, 'fresh');
+    await p7.goto(pollUrl);
+    await p7.click('.join-locks button:text("sign in with discord")');
+    // Someone who has answered opens on everyone's times, as on any return.
+    await p7.click('.tabs button:text("your times")');
+    await p7.waitForSelector('.me-line');
+    assert.match(await p7.locator('.me-line').innerText(), /Answering as Bo/, 'Discord signs a new device in as Bo');
+    assert.match(await p7.locator('.notice').innerText(), /Signed in with Discord/);
+    await shot(p7, '04d-phone-signed-in-with-discord');
+    await p7.click('.me-line button:text("not you?")');
+    discordUser = { id: '308123456789012345', username: 'stranger' };
+    await p7.click('.notice button:text("ok")');
+    await p7.click('.join-locks button:text("sign in with discord")');
+    await p7.waitForSelector('.notice:has-text("No one here is linked")');
+    await shot(p7, '04e-phone-discord-not-linked');
+    assert.equal(await p7.locator('.me-line').count(), 0);
+    await fresh.close();
+
+    // Ten wrong passwords for one person, and the next try waits, even with the right one.
+    const gus = await fetch(`${BASE}/api/polls/${pollId}/people`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Gus', cls: 'warrior', specs: ['protection'], password: 'right-one' }),
+    }).then((r) => r.json());
+    const claimGus = (password) =>
+      fetch(`${BASE}/api/polls/${pollId}/people`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name: 'Gus', claim: true, password }),
+      }).then((r) => r.status);
+    for (let i = 0; i < 10; i++) assert.equal(await claimGus(`wrong-${i}`), 403);
+    assert.equal(await claimGus('right-one'), 429, 'too many wrong passwords and claiming waits');
+    await fetch(`${BASE}/api/polls/${pollId}/people/${gus.person.id}`, {
+      method: 'DELETE',
+      headers: { authorization: `Bearer ${gus.token}` },
+    });
+  }
+
   // ---- Two more people, straight through the API ----
   const join = async (name, cls, specs, keys, mark = 2) => {
     const r = await fetch(`${BASE}/api/polls/${pollId}/people`, {
@@ -324,7 +428,7 @@ try {
   await p1.waitForSelector('.raid-banner');
   assert.match(await p1.locator('.raid-when').innerText(), /^Thursdays, /, 'the raid repeats on its night');
   assert.match(await p1.locator('.raid-server').innerText(), /server time$/);
-  assert.match(await p1.locator('.raid-next').innerText(), /^Next: Thu .+, in \d+ (days?|hours?|minutes?)\.$/, 'with the next night and how long until it');
+  assert.match(await p1.locator('.raid-next').innerText(), /^Next: Thu .+, (in \d+ (days?|hours?|minutes?)|on now)\.$/, 'with the next night and how long until it');
   assert.equal(await p1.locator('.raid-nights li').count(), 4, 'and the nights coming up');
   assert.equal(await p1.locator('.best-item').first().locator('button:text("locked in")').count(), 1, 'best times marks the time locked in');
   await p1.locator('.raid-nights li').first().locator('button:text("call off")').click();
@@ -524,6 +628,7 @@ try {
   console.log(`ok: ${pollUrl}`);
 } finally {
   await browser.close();
+  discord?.close();
   if (server) {
     try {
       process.kill(-server.pid, 'SIGTERM');

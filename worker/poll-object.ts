@@ -40,13 +40,24 @@ interface StoredPerson {
   marks: Person['marks'];
   salt?: string;
   pass?: string;
+  /** Wrong passwords in a row, and when the first of them was: past a few, claiming waits a while. */
+  tries?: { n: number; since: number };
+  /** The Discord account linked to this person. With it they sign in with Discord on any device. */
+  discord?: { id: string; name: string };
   /** Hashes of this person's sign-in tokens, newest last: one per device. */
   tokens: string[];
   created: number;
   updated: number;
 }
 
-export type Failure = { ok: false; status: number; error: string; exists?: boolean; hasPassword?: boolean };
+export type Failure = {
+  ok: false;
+  status: number;
+  error: string;
+  exists?: boolean;
+  hasPassword?: boolean;
+  discord?: boolean;
+};
 export type Outcome<T> = ({ ok: true } & T) | Failure;
 
 export interface Auth {
@@ -79,9 +90,14 @@ export interface SaveInput {
   note?: unknown;
   name?: unknown;
   password?: unknown;
+  /** null unlinks their Discord account. */
+  discord?: null;
 }
 
 const MAX_TOKENS = 8;
+/** Wrong passwords allowed for one person before claiming them waits out the window. */
+const MAX_TRIES = 10;
+const TRY_WINDOW = 15 * 60_000;
 
 function fail(status: number, error: string, extra: Partial<Failure> = {}): Failure {
   return { ok: false, status, error, ...extra };
@@ -98,6 +114,7 @@ function publicPerson(p: StoredPerson): Person {
     note: p.note ?? '',
     marks: p.marks,
     hasPassword: Boolean(p.pass),
+    discord: Boolean(p.discord),
     updated: p.updated,
   };
 }
@@ -182,21 +199,35 @@ export class PollObject extends DurableObject<Env> {
     const existingBefore = this.people().find((p) => p.key === key);
 
     if (existingBefore) {
+      const lock = { hasPassword: Boolean(existingBefore.pass), discord: Boolean(existingBefore.discord) };
       if (input.claim !== true) {
-        return fail(409, `${existingBefore.name} has already answered.`, {
-          exists: true,
-          hasPassword: Boolean(existingBefore.pass),
-        });
+        return fail(409, `${existingBefore.name} has already answered.`, { exists: true, ...lock });
       }
       if (existingBefore.pass) {
-        if (!password.value) return fail(401, `${existingBefore.name} is locked with a password.`, { hasPassword: true });
+        if (!password.value) return fail(401, `${existingBefore.name} is locked with a password.`, lock);
+        const tries = existingBefore.tries;
+        if (tries && tries.n >= MAX_TRIES && Date.now() - tries.since < TRY_WINDOW) {
+          return fail(429, 'Too many wrong passwords. Try again in 15 minutes.', lock);
+        }
         const { hash } = await hashPassword(password.value, existingBefore.salt);
-        if (!sameHash(hash, existingBefore.pass)) return fail(403, 'That password doesn’t match.', { hasPassword: true });
+        if (!sameHash(hash, existingBefore.pass)) {
+          // No await from here: count the miss on the current record.
+          const current = this.kv.get<StoredPerson>(`p:${existingBefore.id}`);
+          if (current) {
+            const fresh = !current.tries || Date.now() - current.tries.since >= TRY_WINDOW;
+            current.tries = fresh ? { n: 1, since: Date.now() } : { n: current.tries!.n + 1, since: current.tries!.since };
+            this.kv.put(`p:${current.id}`, current);
+          }
+          return fail(403, 'That password doesn’t match.', lock);
+        }
+      } else if (existingBefore.discord) {
+        return fail(401, `${existingBefore.name} is linked to Discord. Sign in with Discord to carry on.`, lock);
       }
       // No await from here: re-read and write in one step.
       const current = this.kv.get<StoredPerson>(`p:${existingBefore.id}`);
       if (!current) return fail(409, 'That person was just removed. Try again.');
       current.tokens = [...current.tokens, tokenHash].slice(-MAX_TOKENS);
+      delete current.tries;
       // Times marked on this device only count if they hadn't marked any yet: signing in on a second
       // device mustn't wipe what they marked on the first.
       const claimPoll = this.poll();
@@ -301,10 +332,47 @@ export class PollObject extends DurableObject<Env> {
       if (!mine) return fail(403, 'Only they can change their own password.');
       person.salt = secret?.salt;
       person.pass = secret?.hash;
+      delete person.tries;
+    }
+    if (input.discord === null) {
+      if (!mine) return fail(403, 'Only they can unlink their Discord account.');
+      delete person.discord;
     }
     person.updated = Date.now();
     this.kv.put(`p:${person.id}`, person);
     return { ok: true, person: publicPerson(person), version: this.bump() };
+  }
+
+  /** Whether this token signs in as this person: the check before sending them off to link Discord. */
+  async owns(personId: string, token: string | undefined): Promise<boolean> {
+    if (!token) return false;
+    const tokenHash = await sha256(token);
+    return Boolean(this.kv.get<StoredPerson>(`p:${personId}`)?.tokens.some((t) => sameHash(t, tokenHash)));
+  }
+
+  /** Ties a Discord account to a person, once Discord has said whose it is. One person per account. */
+  async linkDiscord(personId: string, discord: { id: string; name: string }): Promise<Outcome<{ name: string }>> {
+    const person = this.kv.get<StoredPerson>(`p:${personId}`);
+    if (!person) return fail(404, 'That person isn’t in this poll any more.');
+    const other = this.people().find((p) => p.discord?.id === discord.id && p.id !== personId);
+    if (other) return fail(409, `That Discord account is already linked to ${other.name}.`);
+    person.discord = discord;
+    person.updated = Date.now();
+    this.kv.put(`p:${personId}`, person);
+    this.bump();
+    return { ok: true, name: person.name };
+  }
+
+  /** Signs in on this device as whoever this Discord account is linked to. */
+  async discordSignIn(discordId: string): Promise<Outcome<{ personId: string; token: string }>> {
+    const token = randomToken();
+    const tokenHash = await sha256(token);
+    // No await from here.
+    const person = this.people().find((p) => p.discord?.id === discordId);
+    if (!person) return fail(404, 'No one in this poll is linked to that Discord account yet.');
+    person.tokens = [...person.tokens, tokenHash].slice(-MAX_TOKENS);
+    this.kv.put(`p:${person.id}`, person);
+    return { ok: true, personId: person.id, token };
   }
 
   async removePerson(personId: string, auth: Auth): Promise<Outcome<{ version: number }>> {

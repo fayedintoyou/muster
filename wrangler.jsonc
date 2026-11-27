@@ -11,7 +11,7 @@
     "directory": "./dist",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*", "/e/*"]
+    "run_worker_first": ["/api/*", "/e/*", "/auth/*"]
   },
 
   // One Durable Object per poll, holding the poll and everyone's answers in its own SQLite storage.
@@ -20,6 +20,10 @@
     "bindings": [{ "name": "POLLS", "class_name": "PollObject" }]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["PollObject"] }],
+
+  // Sign in with Discord. The client secret is a Worker secret (wrangler secret put DISCORD_CLIENT_SECRET);
+  // DISCORD_ORIGIN is only changed by the end-to-end run, which stands in for Discord.
+  "vars": { "DISCORD_CLIENT_ID": "1575719104306880626", "DISCORD_ORIGIN": "https://discord.com" },
 
   // wrangler deploy attaches the subdomain and creates its DNS record, since fayelore.com is on Cloudflare.
   "routes": [{ "pattern": "muster.fayelore.com", "custom_domain": true }],
@@ -32,6 +36,7 @@
       "name": "muster-preview",
       "workers_dev": true,
       "routes": [],
+      "vars": { "DISCORD_CLIENT_ID": "1575719104306880626", "DISCORD_ORIGIN": "https://discord.com" },
       "durable_objects": {
         "bindings": [{ "name": "POLLS", "class_name": "PollObject" }]
       }
