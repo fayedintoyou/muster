@@ -10,6 +10,7 @@ import { ClassName } from './ClassPicker';
 import { Composition } from './Composition';
 import { RaidBanner } from './RaidBanner';
 import { RaidSize } from './RaidSize';
+import { EventPanel } from './Signups';
 
 // Raid teams, picked from everyone who answered. The poll finds when the guild is free; here its maker
 // splits people into teams, and each team finds and locks in its own time from its members' answers.
@@ -35,6 +36,7 @@ export function TeamsPanel({
   zone,
   admin,
   meId,
+  token,
   nameOf,
   onState,
 }: {
@@ -44,6 +46,8 @@ export function TeamsPanel({
   zone: string;
   admin?: string;
   meId?: string;
+  /** This browser's sign-in, to sign up for a team's nights. */
+  token?: string;
   nameOf: (id: string) => string;
   onState: (state: PollState) => void;
 }) {
@@ -72,6 +76,7 @@ export function TeamsPanel({
           zone={zone}
           admin={admin}
           meId={meId}
+          token={token}
           nameOf={nameOf}
           clashes={clashes.get(t.id) ?? []}
           onState={onState}
@@ -109,6 +114,7 @@ function TeamCard({
   zone,
   admin,
   meId,
+  token,
   nameOf,
   clashes,
   onState,
@@ -120,6 +126,7 @@ function TeamCard({
   zone: string;
   admin?: string;
   meId?: string;
+  token?: string;
   nameOf: (id: string) => string;
   clashes: { person: string; team: Team }[];
   onState: (state: PollState) => void;
@@ -196,6 +203,19 @@ function TeamCard({
           zone={zone}
           label={`${team.name}’s raid`}
           onChange={admin ? async (raid) => onState(await api.lockTeamRaid(poll.id, admin, team.id, raid)) : undefined}
+        />
+      )}
+      {team.raid && (
+        <EventPanel
+          poll={poll}
+          state={state}
+          owner={team.id}
+          raid={team.raid}
+          team={team}
+          zone={zone}
+          me={state.people.find((p) => p.id === meId)}
+          auth={{ token, admin }}
+          onState={onState}
         />
       )}
       {admin && (

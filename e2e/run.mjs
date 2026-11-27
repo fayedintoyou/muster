@@ -478,6 +478,35 @@ try {
   await p2.click('.tabs button:text("teams")');
   assert.equal(await p2.locator('.team button:text("change team")').count(), 0, 'only the maker changes teams');
   await shot(p2, '06d-teams-desk');
+
+  // ---- Sign-ups: Bo says in from the line at the top; Faye, not on the team, signs up from its card ----
+  const boLine = p2.locator('.raid-line', { hasText: 'your team, Thursday 10:' });
+  await boLine.locator('.signup button:text-is("in")').click();
+  await p2.waitForSelector('.raid-line:has-text("Thursday 10") .signup button[aria-pressed="true"]:text-is("in")');
+  const t10 = p2.locator('.team[aria-label="Thursday 10"]');
+  assert.match(await t10.locator('.event-roster').innerText(), /Bo \(you\)/, 'Bo is seated');
+  assert.match(await t10.locator('.event-quiet').innerText(), /Cy.*Dee|Dee.*Cy/, 'and Cy and Dee haven’t answered');
+  assert.equal(await t10.locator('.event button:text("bench")').count(), 0, 'only the maker moves people');
+  await p1.reload();
+  await p1.click('.tabs button:text("teams")');
+  const t10Maker = p1.locator('.team[aria-label="Thursday 10"]');
+  await t10Maker.locator('.event-me button:text-is("in")').click();
+  await t10Maker.locator('.event-roster :text("Faye")').waitFor();
+  assert.match(await t10Maker.locator('.event-roster').innerText(), /Faye \(you\) guild/, 'anyone in the guild can sign up, marked as such');
+  // Late, by how much.
+  await boLine.locator('.signup button:text-is("late")').click();
+  await p2.waitForSelector('.raid-line:has-text("Thursday 10") select[aria-label="How late"]');
+  await p2.selectOption('.raid-line:has-text("Thursday 10") select[aria-label="How late"]', '30');
+  await p2.waitForSelector('.team[aria-label="Thursday 10"] .event-roster :text("30 min late")');
+  // The maker benches Faye for the night, and puts her back.
+  await p1.reload();
+  await p1.click('.tabs button:text("teams")');
+  await t10Maker.locator('.event-person', { hasText: 'Faye' }).locator('button:text("bench")').click();
+  await t10Maker.locator('.event-line:has-text("standby") :text("Faye")').waitFor();
+  await shot(p1, '06e-signups-phone');
+  await t10Maker.locator('.event-person', { hasText: 'Faye' }).locator('button:text("undo bench")').click();
+  await t10Maker.locator('.event-roster :text("Faye")').waitFor();
+  await shot(p2, '06f-signups-desk');
   await p2.click('.tabs button:text("everyone")');
 
   await shot(p2, '07-desk-full');

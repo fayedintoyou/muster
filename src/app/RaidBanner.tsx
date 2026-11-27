@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { type ReactNode, useEffect, useId, useState } from 'react';
 import type { Poll } from '../core/types';
 import { type Raid, raidCalendar, raidNights } from '../core/raid';
 import { formatDate, formatRange, serverTime, weekdayName, zonePlace } from '../core/format';
@@ -28,6 +28,7 @@ export function RaidBanner({
   label = 'the raid',
   onChange,
   compact = false,
+  children,
 }: {
   poll: Poll;
   raid: Raid;
@@ -38,6 +39,8 @@ export function RaidBanner({
   onChange?: (raid: Pick<Raid, 'start' | 'minutes' | 'skips'> | null) => Promise<void>;
   /** One line: when, and the next night. */
   compact?: boolean;
+  /** Shown after it: sign-ups for the next night, say. */
+  children?: ReactNode;
 }) {
   const [now, setNow] = useState(() => Date.now());
   const [copied, copy] = useCopied();
@@ -97,6 +100,7 @@ export function RaidBanner({
             )}
           </>
         )}
+        {children}
       </p>
     );
   }
@@ -160,6 +164,7 @@ export function RaidBanner({
       ) : (
         <p className="raid-next">This raid has been and gone.</p>
       )}
+      {children}
       {error && (
         <p className="error" role="alert">
           {error}

@@ -962,3 +962,48 @@ button.row-head:hover { color: var(--lamp); }
 .raid-line { margin: 0.9rem 0 0; padding: 0.55rem 0 0.6rem; border-top: 1px solid var(--line); font-size: 0.9375rem; }
 .raid-line .raid-label { margin: 0 0.4rem 0 0; display: inline; }
 .raid-line + .raid-banner, .raid-line + .raid-line { margin-top: 0; }
+
+/* ---------- Sign-ups for a raid's nights ---------- */
+
+.signup { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; vertical-align: middle; }
+.segmented.small button { min-height: 1.9rem; padding: 0.15rem 0.7rem; font-size: 0.75rem; }
+.signup .segmented button[aria-pressed='true'] { background: var(--lamp); color: var(--night); font-weight: 500; }
+.signup select { width: auto; min-width: 8rem; min-height: 1.9rem; padding: 0.1rem 0.4rem; font-size: 0.8125rem; }
+.raid-line .signup { margin-left: 0.25rem; }
+
+.event { margin-top: 1rem; display: grid; gap: 0.6rem; max-width: 46rem; }
+.event-nights { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.event-me { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.6rem; }
+.event-count { display: flex; align-items: baseline; gap: 0.6rem; margin: 0.2rem 0 0; }
+.event-roster { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.35rem; }
+.event-roster li, .event-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.2rem 1rem;
+  margin: 0;
+  font-size: 0.9375rem;
+}
+.event-role {
+  flex: 0 0 6.5rem;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+.event-person { display: inline-flex; align-items: baseline; gap: 0.4rem; }
+.roster-name { color: var(--class, var(--ink)); }
+.roster-name .muted { font-size: 0.8125rem; }
+.event-quiet { color: #d7cfc3; }
+.event-details { margin-top: 0.75rem; }
+.event-details summary {
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+.event-details summary:hover { color: var(--ink); }
+@media (max-width: 560px) {
+  .event-role { flex-basis: 100%; }
+}

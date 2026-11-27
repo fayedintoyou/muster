@@ -1,7 +1,9 @@
 import { DurableObject } from 'cloudflare:workers';
 import type { Person, Poll, PollSettings, PollState } from '../src/core/types';
 import { slotKeys } from '../src/core/slots';
-import { type Raid, validateRaid } from '../src/core/raid';
+import { type Raid, raidNights, validateRaid } from '../src/core/raid';
+import { type EventSignups, POLL_RAID, eventKey, nextSignup, validateSignup } from '../src/core/signup';
+import { addDays, dateKey, today } from '../src/core/time';
 import { TEAM_LIMITS, type Team, validateTeam } from '../src/core/team';
 import { REALM_TIME, ROLES, WOW_CLASSES, rolesFor } from '../src/core/classes';
 import {
@@ -149,6 +151,27 @@ export class PollObject extends DurableObject<Env> {
     return this.kv.get<Team[]>('teams') ?? [];
   }
 
+  /** Sign-ups for nights from yesterday on, by event key; older nights stay stored but aren't sent. */
+  private signups(tz: string): Record<string, EventSignups> {
+    const from = dateKey(addDays(today(tz), -1));
+    const out: Record<string, EventSignups> = {};
+    for (const [key, value] of this.kv.list<EventSignups>({ prefix: 's:' })) {
+      const event = key.slice(2);
+      if (event.slice(event.indexOf('/') + 1) >= from) out[event] = value;
+    }
+    return out;
+  }
+
+  /** The raid an event belongs to, and that the night is one of its coming nights that's on. */
+  private eventRaid(poll: Poll, owner: string, night: string): Raid | Failure {
+    const raid = owner === POLL_RAID ? this.kv.get<Raid>('raid') : this.teams().find((t) => t.id === owner)?.raid;
+    if (!raid) return fail(404, 'That raid isn’t locked in any more.');
+    const n = raidNights(poll, raid, Date.now(), 8).find((x) => x.night === night);
+    if (!n) return fail(404, 'That night isn’t coming up.');
+    if (n.off) return fail(409, 'That night has been called off.');
+    return raid;
+  }
+
   private bump(): number {
     const v = (this.kv.get<number>('version') ?? 0) + 1;
     this.kv.put('version', v);
@@ -163,6 +186,7 @@ export class PollObject extends DurableObject<Env> {
       people: this.people().map(publicPerson),
       raid: this.kv.get<Raid>('raid') ?? null,
       teams: this.teams(),
+      signups: this.signups(poll.tz),
       version: this.kv.get<number>('version') ?? 0,
     };
   }
@@ -491,6 +515,60 @@ export class PollObject extends DurableObject<Env> {
       teams[i] = { ...teams[i], raid: { ...checked.value, version: (teams[i].raid?.version ?? 0) + 1 } };
     }
     this.kv.put('teams', teams);
+    this.bump();
+    return { ok: true, state: this.state()! };
+  }
+
+  /** Someone says whether they're coming on one night: in, late, tentative, out, or null to take it back. */
+  async signUp(
+    auth: Auth,
+    owner: string,
+    night: string,
+    personId: string,
+    input: unknown,
+  ): Promise<Outcome<{ state: PollState }>> {
+    const tokenHash = auth.token ? await sha256(auth.token) : undefined;
+    const isAdmin = await this.adminOk(auth.admin);
+    // No await from here.
+    const poll = this.poll();
+    if (!poll) return fail(404, 'This poll doesn’t exist.');
+    const person = this.kv.get<StoredPerson>(`p:${personId}`);
+    if (!person) return fail(404, 'That person isn’t in this poll any more.');
+    const mine = tokenHash !== undefined && person.tokens.some((t) => sameHash(t, tokenHash));
+    if (!mine && !isAdmin) return fail(403, 'Sign in as this person to sign them up.');
+    const raid = this.eventRaid(poll, owner, night);
+    if ('ok' in raid) return raid;
+    const change = validateSignup(input);
+    if (!change.ok) return fail(400, change.error);
+    const key = `s:${eventKey(owner, night)}`;
+    const event = this.kv.get<EventSignups>(key) ?? { people: {}, moves: {} };
+    if (change.value) event.people[personId] = nextSignup(event.people[personId], change.value, Date.now());
+    else delete event.people[personId];
+    this.kv.put(key, event);
+    this.bump();
+    return { ok: true, state: this.state()! };
+  }
+
+  /** An organizer seats or benches someone for one night, or with null leaves it to the usual order. */
+  async moveSignup(
+    admin: string | undefined,
+    owner: string,
+    night: string,
+    personId: string,
+    move: unknown,
+  ): Promise<Outcome<{ state: PollState }>> {
+    if (!(await this.adminOk(admin))) return fail(403, 'Only whoever made the poll can move people.');
+    const poll = this.poll();
+    if (!poll) return fail(404, 'This poll doesn’t exist.');
+    const raid = this.eventRaid(poll, owner, night);
+    if ('ok' in raid) return raid;
+    if (move !== null && move !== 'seat' && move !== 'bench') return fail(400, 'Seat or bench them.');
+    const key = `s:${eventKey(owner, night)}`;
+    const event = this.kv.get<EventSignups>(key) ?? { people: {}, moves: {} };
+    if (!event.people[personId]) return fail(409, 'They haven’t signed up for that night.');
+    if (move) event.moves[personId] = move;
+    else delete event.moves[personId];
+    this.kv.put(key, event);
     this.bump();
     return { ok: true, state: this.state()! };
   }

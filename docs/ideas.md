@@ -185,6 +185,11 @@ web requests, so no bot program has to keep running.
 2. Teams picked from the poll, each with its own best times and lock-in. Done (PR #19).
 3. Events from each team's schedule, plus one-off events, with sign-ups (in, late with a time, tentative,
    out) and the roster: team first, then the guild, then standby. "Usually free" fills in a first guess.
+   Done for locked-in raids (PR #21): each coming night of a team's raid, or the poll's own, has in, late
+   (by 15 to 90 minutes), maybe and out, one tap from the team's line at the top. Its roster seats the
+   team first, then the guild in sign-up order, then standby. The organizer can seat or bench anyone for
+   a night, and people who haven't answered show whether the poll has them usually free. Still to do:
+   one-off events, and "team only".
 4. Dated absences, on the member, so they apply to every team.
 
 The guild raids on this from launch day: raid posts go up as a copied Discord message with a link

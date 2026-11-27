@@ -3,6 +3,7 @@ import { ID_PATTERN, TEAM_ID, randomId, randomToken, sha256 } from './crypto';
 import { discordCallback, discordStart } from './discord';
 import { auth, error, fromFailure, json } from './http';
 import { validateSettings } from '../src/core/validate';
+import { POLL_RAID } from '../src/core/signup';
 import { describePoll } from './describe';
 
 export { PollObject };
@@ -73,6 +74,22 @@ async function api(request: Request, env: Env, url: URL): Promise<Response> {
     const body = await readJson(request);
     if (body instanceof Response) return body;
     return discordStart(request, env, url, id, body);
+  }
+
+  // /signups/<raid or team>/<night>/<person>: someone's answer for one night; /moves/…: an organizer's call.
+  if ((parts[3] === 'signups' || parts[3] === 'moves') && parts.length === 7) {
+    const [, , , kind, owner, night, personId] = parts;
+    if ((owner !== POLL_RAID && !TEAM_ID.test(owner)) || !/^\d{4}-\d{2}-\d{2}$/.test(night) || !ID_PATTERN.test(personId)) {
+      return error(404, 'Not found.');
+    }
+    if (method !== 'PUT') return error(405, 'Method not allowed.');
+    const body = await readJson(request);
+    if (body instanceof Response) return body;
+    const result =
+      kind === 'signups'
+        ? await poll.signUp(auth(request), owner, night, personId, body)
+        : await poll.moveSignup(auth(request).admin, owner, night, personId, body.move ?? null);
+    return result.ok ? json(result.state) : fromFailure(result);
   }
 
   if (parts[3] === 'raid' && parts.length === 4) {

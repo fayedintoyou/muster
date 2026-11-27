@@ -9,6 +9,7 @@ import { cleanMarks, validateSettings } from './validate';
 import { seat } from './seating';
 import { raidCalendar, raidNights, validateRaid } from './raid';
 import { raidsClash, teamClashes, validateTeam } from './team';
+import { nextSignup, roster, usuallyFree, validateSignup } from './signup';
 import type { Person, PollSettings } from './types';
 
 const NY = 'America/New_York';
@@ -323,5 +324,61 @@ describe('validation', () => {
     const keys = new Set(slotKeys(weekly));
     const r = cleanMarks({ 'w2/1200': 2, 'w2/1230': 1, 'w3/1200': 2, 'w2/1260': 5 }, keys);
     expect(r.ok && r.value).toEqual({ 'w2/1200': 2, 'w2/1230': 1 });
+  });
+});
+
+describe('sign-ups', () => {
+  const raid = { start: 'w4/1200', minutes: 60 };
+  const poll = { size: 0, makeup: {}, slot: 30 as const };
+  const at = (n: number) => ({ status: 'in' as const, at: n });
+
+  it('seats the team first, then the guild first come, then standby', () => {
+    const people = [
+      person('tankA', {}, ['tank']),
+      person('healA', {}, ['healer']),
+      person('dpsA', {}, ['dps']),
+      person('dpsB', {}, ['dps']),
+      person('guest1', {}, ['dps']),
+      person('guest2', {}, ['dps', 'healer']),
+    ];
+    const team = { members: ['tankA', 'healA', 'dpsA', 'dpsB'], size: 4, makeup: { tank: 1, healer: 1 } };
+    // The guests signed up before two of the team, yet the team's members are seated first.
+    const event = {
+      people: { guest1: at(1), guest2: at(2), tankA: at(3), healA: at(4), dpsA: at(5) },
+      moves: {},
+    };
+    const r = roster(people, event, raid, team, poll);
+    expect(r.seating.seated.map((s) => s.id).sort()).toEqual(['dpsA', 'guest1', 'healA', 'tankA']);
+    expect(r.standby).toEqual(['guest2']);
+    expect(r.unanswered.map((u) => u.id)).toEqual(['dpsB']);
+  });
+
+  it('lets an organizer seat or bench anyone', () => {
+    const people = [person('a', {}, ['dps']), person('b', {}, ['dps']), person('c', {}, ['dps'])];
+    const team = { members: ['a', 'b'], size: 2, makeup: {} };
+    const event = { people: { a: at(1), b: at(2), c: at(3) }, moves: { c: 'seat' as const, a: 'bench' as const } };
+    const r = roster(people, event, raid, team, poll);
+    expect(r.seating.seated.map((s) => s.id).sort()).toEqual(['b', 'c']);
+    expect(r.standby).toEqual(['a']);
+  });
+
+  it('keeps your place when you switch between in and late, not after dropping out', () => {
+    const first = nextSignup(undefined, { status: 'in' }, 10);
+    expect(nextSignup(first, { status: 'late', late: 30 }, 20).at).toBe(10);
+    const out = nextSignup(first, { status: 'out' }, 30);
+    expect(nextSignup(out, { status: 'in' }, 40).at).toBe(40);
+  });
+
+  it('says whether the poll has someone free for the raid', () => {
+    expect(usuallyFree(person('x', { 'w4/1200': 2, 'w4/1230': 2 }), raid, 30)).toBe('free');
+    expect(usuallyFree(person('x', { 'w4/1200': 2, 'w4/1230': 1 }), raid, 30)).toBe('if needed');
+    expect(usuallyFree(person('x', { 'w4/1200': 2 }), raid, 30)).toBe('busy');
+  });
+
+  it('checks what a sign-up says', () => {
+    expect(validateSignup({ status: 'late', late: 30 })).toEqual({ ok: true, value: { status: 'late', late: 30 } });
+    expect(validateSignup({ status: 'late' }).ok).toBe(false);
+    expect(validateSignup({ status: 'maybe' }).ok).toBe(false);
+    expect(validateSignup({ status: null })).toEqual({ ok: true, value: null });
   });
 });

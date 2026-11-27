@@ -1,6 +1,7 @@
 import type { Marks, Person, PollSettings, PollState } from '../core/types';
 import type { Raid } from '../core/raid';
 import type { Team } from '../core/team';
+import type { Move, SignupStatus } from '../core/signup';
 
 export class ApiError extends Error {
   constructor(
@@ -116,6 +117,28 @@ export const api = {
       ...auth,
       keepalive,
       body: JSON.stringify(input),
+    });
+  },
+  /** One person's answer for one raid night; status null takes it back. */
+  signUp(
+    id: string,
+    event: { owner: string; night: string },
+    personId: string,
+    auth: { token?: string; admin?: string },
+    signup: { status: SignupStatus | null; late?: number },
+  ) {
+    return call<PollState>(`/api/polls/${id}/signups/${event.owner}/${event.night}/${personId}`, {
+      method: 'PUT',
+      ...auth,
+      body: JSON.stringify(signup),
+    });
+  },
+  /** An organizer seats or benches someone for one night; null leaves it to the usual order. */
+  move(id: string, admin: string, event: { owner: string; night: string }, personId: string, move: Move | null) {
+    return call<PollState>(`/api/polls/${id}/moves/${event.owner}/${event.night}/${personId}`, {
+      method: 'PUT',
+      admin,
+      body: JSON.stringify({ move }),
     });
   },
   /** Where to send the browser to sign in with Discord, or with a person and their token, to link it. */

@@ -1,4 +1,5 @@
 import type { Raid } from './raid';
+import type { EventSignups } from './signup';
 import type { Team } from './team';
 
 export type Mode = 'weekly' | 'dates';
@@ -66,5 +67,7 @@ export interface PollState {
   raid: Raid | null;
   /** Raid teams the organizer picked from the people here. */
   teams: Team[];
+  /** Who's coming on each raid night from yesterday on, by event key ('<team or raid>/<night>'). */
+  signups: Record<string, EventSignups>;
   version: number;
 }
