@@ -324,7 +324,7 @@ try {
   await p1.waitForSelector('.raid-banner');
   assert.match(await p1.locator('.raid-when').innerText(), /^Thursdays, /, 'the raid repeats on its night');
   assert.match(await p1.locator('.raid-server').innerText(), /server time$/);
-  assert.match(await p1.locator('.raid-next').innerText(), /^Next: Thu .+, in \d+ (days|hours|minutes)\.$/, 'with the next night and how long until it');
+  assert.match(await p1.locator('.raid-next').innerText(), /^Next: Thu .+, in \d+ (days?|hours?|minutes?)\.$/, 'with the next night and how long until it');
   assert.equal(await p1.locator('.raid-nights li').count(), 4, 'and the nights coming up');
   assert.equal(await p1.locator('.best-item').first().locator('button:text("locked in")').count(), 1, 'best times marks the time locked in');
   await p1.locator('.raid-nights li').first().locator('button:text("call off")').click();
@@ -339,6 +339,42 @@ try {
   await p2.waitForSelector('.raid-banner');
   assert.match(await p2.locator('.raid-when').innerText(), /^[A-Z][a-z]+days, \d{2}:\d{2}/, 'Berlin sees the raid on its own night and 24-hour clock');
   assert.equal(await p2.locator('.raid-banner button:text("call off"), .raid-banner button:text("unlock")').count(), 0, 'only the maker can change the raid');
+
+  // ---- Teams: the maker splits everyone into raid teams, each with its own time ----
+  await p1.click('.tabs button:text("teams")');
+  await p1.click('.teams button:text("new team")');
+  await p1.fill('.team-form input[id^="team-name"]', 'Thursday 10');
+  await p1.click('.team-form .segmented[aria-label="Raid size"] button:text("10 players")');
+  for (const name of ['Bo', 'Cy', 'Dee']) await p1.locator('.team-pick li', { hasText: name }).locator('input').check();
+  assert.match(await p1.locator('.team-form legend', { hasText: 'Who’s on it?' }).innerText(), /3 of 10/, 'the picker counts toward the size');
+  await p1.click('.team-form button:text("make the team")');
+  await p1.waitForSelector('.team h3:text("Thursday 10")');
+  const team = p1.locator('.team[aria-label="Thursday 10"]');
+  assert.equal(await team.locator('.team-roster li').count(), 3, 'the team has the three picked');
+  await team.locator('button:text("find a time")').click();
+  await team.locator('.best-item').first().waitFor();
+  assert.match(await team.locator('.best-item').first().locator('.best-count').innerText(), /3\s*\/10\s*seated/, 'best times for the team reads only its members');
+  await team.locator('.best-item').first().locator('button:text("lock in this time")').click();
+  await team.locator('.raid-banner .raid-label:text("Thursday 10’s raid")').waitFor();
+  // A second team sharing Bo, locked in at the same time, is flagged.
+  await p1.click('.teams button:text("new team")');
+  await p1.fill('.team-form input[id^="team-name"]', 'Alt run');
+  for (const name of ['Bo', 'Cy']) await p1.locator('.team-pick li', { hasText: name }).locator('input').check();
+  assert.match(await p1.locator('.team-pick li', { hasText: 'Bo' }).innerText(), /on Thursday 10/, 'the picker shows who is already on a team');
+  await p1.click('.team-form button:text("make the team")');
+  const alt = p1.locator('.team[aria-label="Alt run"]');
+  await alt.locator('button:text("find a time")').click();
+  // Bo and Cy share Wednesday and Thursday, so that entry offers a button for each night.
+  await alt.locator('.best-item').first().locator('.best-lock button:text-is("Thu")').click();
+  await alt.locator('.raid-banner').waitFor();
+  assert.match(await alt.locator('.team-clash').innerText(), /Bo and Cy are also on Thursday 10, which raids at the same time\./, 'a clash is flagged');
+  await shot(p1, '06c-teams-phone');
+  await p2.reload();
+  await p2.waitForSelector('.raid-line .raid-label:text("your team, Thursday 10:")');
+  await p2.click('.tabs button:text("teams")');
+  assert.equal(await p2.locator('.team button:text("change team")').count(), 0, 'only the maker changes teams');
+  await shot(p2, '06d-teams-desk');
+  await p2.click('.tabs button:text("everyone")');
 
   await shot(p2, '07-desk-full');
 

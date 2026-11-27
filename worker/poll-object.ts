@@ -2,6 +2,7 @@ import { DurableObject } from 'cloudflare:workers';
 import type { Person, Poll, PollSettings, PollState } from '../src/core/types';
 import { slotKeys } from '../src/core/slots';
 import { type Raid, validateRaid } from '../src/core/raid';
+import { TEAM_LIMITS, type Team, validateTeam } from '../src/core/team';
 import { REALM_TIME, ROLES, WOW_CLASSES, rolesFor } from '../src/core/classes';
 import {
   LIMITS,
@@ -127,6 +128,10 @@ export class PollObject extends DurableObject<Env> {
     return out.sort((a, b) => a.created - b.created);
   }
 
+  private teams(): Team[] {
+    return this.kv.get<Team[]>('teams') ?? [];
+  }
+
   private bump(): number {
     const v = (this.kv.get<number>('version') ?? 0) + 1;
     this.kv.put('version', v);
@@ -140,6 +145,7 @@ export class PollObject extends DurableObject<Env> {
       poll,
       people: this.people().map(publicPerson),
       raid: this.kv.get<Raid>('raid') ?? null,
+      teams: this.teams(),
       version: this.kv.get<number>('version') ?? 0,
     };
   }
@@ -309,6 +315,11 @@ export class PollObject extends DurableObject<Env> {
     const mine = tokenHash !== undefined && person.tokens.some((t) => sameHash(t, tokenHash));
     if (!mine && !isAdmin) return fail(403, 'Only they, or whoever made the poll, can remove them.');
     this.kv.delete(`p:${personId}`);
+    // And off any team they were on.
+    const teams = this.teams();
+    if (teams.some((t) => t.members.includes(personId))) {
+      this.kv.put('teams', teams.map((t) => ({ ...t, members: t.members.filter((m) => m !== personId) })));
+    }
     return { ok: true, version: this.bump() };
   }
 
@@ -328,6 +339,10 @@ export class PollObject extends DurableObject<Env> {
     // A locked-in raid whose time is no longer in the poll comes unlocked.
     const raid = this.kv.get<Raid>('raid');
     if (raid && !validateRaid(raid, next).ok) this.kv.delete('raid');
+    const teams = this.teams();
+    if (teams.some((t) => t.raid && !validateRaid(t.raid, next).ok)) {
+      this.kv.put('teams', teams.map((t) => (t.raid && !validateRaid(t.raid, next).ok ? { ...t, raid: null } : t)));
+    }
     // Roles and classes taken away come off people too.
     if (next.roles.join() !== poll.roles.join() || next.classes.join() !== poll.classes.join()) {
       for (const p of this.people()) {
@@ -357,6 +372,57 @@ export class PollObject extends DurableObject<Env> {
     if (!(await this.adminOk(admin))) return fail(403, 'Only whoever made the poll can unlock the raid.');
     if (!this.poll()) return fail(404, 'This poll doesn’t exist.');
     this.kv.delete('raid');
+    this.bump();
+    return { ok: true, state: this.state()! };
+  }
+
+  /** Makes a team (no `teamId`) or changes one: its name, members, size and make-up. */
+  async saveTeam(admin: string | undefined, teamId: string | undefined, input: unknown): Promise<Outcome<{ state: PollState }>> {
+    if (!(await this.adminOk(admin))) return fail(403, 'Only whoever made the poll can change its teams.');
+    if (!this.poll()) return fail(404, 'This poll doesn’t exist.');
+    const checked = validateTeam(input, new Set(this.people().map((p) => p.id)));
+    if (!checked.ok) return fail(400, checked.error);
+    const teams = this.teams();
+    if (teamId === undefined) {
+      if (teams.length >= TEAM_LIMITS.teams) return fail(400, `A poll can have at most ${TEAM_LIMITS.teams} teams.`);
+      let id = randomId(6);
+      while (teams.some((t) => t.id === id)) id = randomId(6);
+      teams.push({ id, ...checked.value, raid: null });
+    } else {
+      const i = teams.findIndex((t) => t.id === teamId);
+      if (i < 0) return fail(404, 'That team doesn’t exist any more.');
+      teams[i] = { ...teams[i], ...checked.value };
+    }
+    this.kv.put('teams', teams);
+    this.bump();
+    return { ok: true, state: this.state()! };
+  }
+
+  async deleteTeam(admin: string | undefined, teamId: string): Promise<Outcome<{ state: PollState }>> {
+    if (!(await this.adminOk(admin))) return fail(403, 'Only whoever made the poll can change its teams.');
+    const teams = this.teams();
+    if (!teams.some((t) => t.id === teamId)) return fail(404, 'That team doesn’t exist any more.');
+    this.kv.put('teams', teams.filter((t) => t.id !== teamId));
+    this.bump();
+    return { ok: true, state: this.state()! };
+  }
+
+  /** Locks in a team's raid, changes it (nights called off), or with null unlocks it. */
+  async lockTeamRaid(admin: string | undefined, teamId: string, input: unknown): Promise<Outcome<{ state: PollState }>> {
+    if (!(await this.adminOk(admin))) return fail(403, 'Only whoever made the poll can lock in a team’s raid.');
+    const poll = this.poll();
+    if (!poll) return fail(404, 'This poll doesn’t exist.');
+    const teams = this.teams();
+    const i = teams.findIndex((t) => t.id === teamId);
+    if (i < 0) return fail(404, 'That team doesn’t exist any more.');
+    if (input === null) {
+      teams[i] = { ...teams[i], raid: null };
+    } else {
+      const checked = validateRaid(input, poll);
+      if (!checked.ok) return fail(400, checked.error);
+      teams[i] = { ...teams[i], raid: { ...checked.value, version: (teams[i].raid?.version ?? 0) + 1 } };
+    }
+    this.kv.put('teams', teams);
     this.bump();
     return { ok: true, state: this.state()! };
   }

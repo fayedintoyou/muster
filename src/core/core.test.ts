@@ -8,6 +8,7 @@ import { formatMinute, formatRange, serverTime } from './format';
 import { cleanMarks, validateSettings } from './validate';
 import { seat } from './seating';
 import { raidCalendar, raidNights, validateRaid } from './raid';
+import { raidsClash, teamClashes, validateTeam } from './team';
 import type { Person, PollSettings } from './types';
 
 const NY = 'America/New_York';
@@ -222,6 +223,29 @@ describe('a locked-in raid', () => {
     expect(ics).toContain('EXDATE;TZID=America/New_York:20261203T200000');
     expect(ics).toContain('SEQUENCE:2');
     expect(ics).toContain('DURATION:PT180M');
+  });
+});
+
+describe('teams', () => {
+  it('keeps only people in the poll, once each', () => {
+    const r = validateTeam({ name: '  Thursday   10 ', members: ['a', 'zz', 'a', 'b'], size: 10, makeup: { tank: 2, healer: 3 } }, new Set(['a', 'b']));
+    expect(r.ok && r.value).toEqual({ name: 'Thursday 10', members: ['a', 'b'], size: 10, makeup: { tank: 2, healer: 3 } });
+    expect(validateTeam({ name: ' ', members: [] }, new Set()).ok).toBe(false);
+  });
+
+  it('finds people on two teams whose raids overlap', () => {
+    expect(raidsClash({ start: 'w4/1200', minutes: 180 }, { start: 'w4/1290', minutes: 120 })).toBe(true);
+    expect(raidsClash({ start: 'w4/1200', minutes: 90 }, { start: 'w4/1290', minutes: 120 })).toBe(false);
+    expect(raidsClash({ start: 'w4/1200', minutes: 180 }, { start: 'w2/1200', minutes: 180 })).toBe(false);
+    const raid = (start: string) => ({ start, minutes: 180, skips: [], version: 1 });
+    const teams = [
+      { id: 'one', name: 'One', members: ['faye', 'bo'], size: 0, makeup: {}, raid: raid('w4/1200') },
+      { id: 'two', name: 'Two', members: ['bo'], size: 0, makeup: {}, raid: raid('w4/1260') },
+      { id: 'tre', name: 'Three', members: ['faye'], size: 0, makeup: {}, raid: raid('w2/1200') },
+    ];
+    const clashes = teamClashes(teams);
+    expect(clashes.get('one')?.map((c) => [c.person, c.team.id])).toEqual([['bo', 'two']]);
+    expect(clashes.get('tre')).toEqual([]);
   });
 });
 

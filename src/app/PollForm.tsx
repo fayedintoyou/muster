@@ -5,8 +5,8 @@ import { WEEK_ORDER, slotKeys } from '../core/slots';
 import { REALM_TIME, ROLES, WOW_CLASSES } from '../core/classes';
 import { formatDuration, formatMinute, weekdayName } from '../core/format';
 import { today, windowLength } from '../core/time';
-import { RAID_SIZES, seatsFor, usualMakeup } from '../core/seating';
 import { DatePicker } from './DatePicker';
+import { RaidSize } from './RaidSize';
 import { classStyle } from './ClassPicker';
 import { ClassIcon } from './icons';
 import { ZonePicker } from './ZonePicker';
@@ -67,7 +67,6 @@ export function PollForm({
   const [length, setLength] = useState(initial.length);
   const [size, setSize] = useState(initial.size);
   const [makeup, setMakeup] = useState(initial.makeup);
-  const seats = seatsFor(size, makeup);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -225,43 +224,14 @@ export function PollForm({
             </select>
           </label>
         </div>
-        <div className="segmented" role="radiogroup" aria-label="Raid size">
-          {[0, ...RAID_SIZES].map((n) => (
-            <button
-              type="button"
-              role="radio"
-              key={n}
-              aria-checked={size === n}
-              onClick={() => {
-                setSize(n);
-                setMakeup(usualMakeup(n));
-              }}
-            >
-              {n ? `${n} players` : 'any size'}
-            </button>
-          ))}
-        </div>
-        {size > 0 && (
-          <div className="makeup">
-            {(['tank', 'healer'] as const).map((role) => (
-              <label key={role} className="select">
-                <select
-                  aria-label={role === 'tank' ? 'Tanks' : 'Healers'}
-                  value={makeup[role] ?? 0}
-                  onChange={(e) => setMakeup((m) => ({ ...m, [role]: Number(e.target.value) }))}
-                >
-                  {Array.from({ length: size + 1 }, (_, n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
-                <span>{role === 'tank' ? 'tanks' : 'healers'}</span>
-              </label>
-            ))}
-            <span className="makeup-rest">{seats.dps} dps</span>
-          </div>
-        )}
+        <RaidSize
+          size={size}
+          makeup={makeup}
+          onChange={(n, m) => {
+            setSize(n);
+            setMakeup(m);
+          }}
+        />
         <p className="hint">
           {size
             ? `Best times seats each person once, in a role they play, and shows what a ${size} still needs.`

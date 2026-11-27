@@ -1,10 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import type { Poll } from '../core/types';
 import { type Raid, raidCalendar, raidNights } from '../core/raid';
 import { formatDate, formatRange, serverTime, weekdayName, zonePlace } from '../core/format';
 import { localTime } from '../core/time';
 import { discordTimestamps } from '../core/occurrence';
-import { api } from './api';
 import { useCopied } from './copy';
 
 /** "in 3 days", "in 5 hours", "in 20 minutes", "on now". */
@@ -13,7 +12,7 @@ function until(ms: number): string {
   const minutes = Math.ceil(ms / 60_000);
   if (minutes < 60) return `in ${minutes} minute${minutes === 1 ? '' : 's'}`;
   const hours = Math.round(minutes / 60);
-  if (hours < 48) return `in ${hours} hours`;
+  if (hours < 48) return `in ${hours} hour${hours === 1 ? '' : 's'}`;
   return `in ${Math.round(hours / 24)} days`;
 }
 
@@ -26,18 +25,24 @@ export function RaidBanner({
   poll,
   raid,
   zone,
-  admin,
-  onState,
+  label = 'the raid',
+  onChange,
+  compact = false,
 }: {
   poll: Poll;
   raid: Raid;
   zone: string;
-  admin?: string;
-  onState: (state: Awaited<ReturnType<typeof api.lockRaid>>) => void;
+  /** "the raid", or the team's name. */
+  label?: string;
+  /** For the poll's maker: change the raid (nights called off), or with null unlock it. */
+  onChange?: (raid: Pick<Raid, 'start' | 'minutes' | 'skips'> | null) => Promise<void>;
+  /** One line: when, and the next night. */
+  compact?: boolean;
 }) {
   const [now, setNow] = useState(() => Date.now());
   const [copied, copy] = useCopied();
   const [error, setError] = useState('');
+  const titleId = `raid-${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
   useEffect(() => {
     const tick = window.setInterval(() => setNow(Date.now()), 30_000);
     return () => window.clearInterval(tick);
@@ -54,18 +59,18 @@ export function RaidBanner({
   };
   const server = shown ? serverTime(poll.realm, zone, shown.start, shown.end) : null;
 
-  const change = async (call: () => Promise<Parameters<typeof onState>[0]>) => {
+  const change = async (next: Parameters<NonNullable<typeof onChange>>[0]) => {
+    if (!onChange) return;
     setError('');
     try {
-      onState(await call());
+      await onChange(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
   };
   const toggleNight = (night: string) => {
-    if (!admin) return;
     const skips = raid.skips.includes(night) ? raid.skips.filter((s) => s !== night) : [...raid.skips, night];
-    void change(() => api.lockRaid(poll.id, admin, { start: raid.start, minutes: raid.minutes, skips }));
+    void change({ start: raid.start, minutes: raid.minutes, skips });
   };
   const download = () => {
     const ics = raidCalendar(poll, raid, `${location.origin}/e/${poll.id}`);
@@ -76,10 +81,30 @@ export function RaidBanner({
     URL.revokeObjectURL(link.href);
   };
 
+  if (compact) {
+    return (
+      <p className="raid-line">
+        <span className="raid-label">{label}</span>{' '}
+        {shown && (
+          <>
+            {day(shown.start, 'long')}, {formatRange(shown.start, shown.end, zone)}
+            {server && <span className="muted"> ({server} server)</span>}
+            {next && (
+              <span className="muted">
+                {' '}
+                · next {day(next.start, 'short')}, {until(next.start - now)}
+              </span>
+            )}
+          </>
+        )}
+      </p>
+    );
+  }
+
   return (
-    <section className="raid-banner" aria-labelledby="raid-title">
-      <p className="raid-label" id="raid-title">
-        the raid
+    <section className="raid-banner" aria-labelledby={titleId}>
+      <p className="raid-label" id={titleId}>
+        {label}
       </p>
       {shown ? (
         <>
@@ -103,7 +128,7 @@ export function RaidBanner({
                 <li key={n.night} data-off={n.off || undefined}>
                   <span>{day(n.start, 'short')}</span>
                   {n.off && <span className="raid-off">off</span>}
-                  {admin && (
+                  {onChange && (
                     <button type="button" className="text-button" onClick={() => toggleNight(n.night)}>
                       {n.off ? 'back on' : 'call off'}
                     </button>
@@ -125,8 +150,8 @@ export function RaidBanner({
                 {copied === 'raid' ? 'copied: paste it in discord' : 'copy for discord'}
               </button>
             )}
-            {admin && (
-              <button type="button" className="text-button" onClick={() => void change(() => api.unlockRaid(poll.id, admin))}>
+            {onChange && (
+              <button type="button" className="text-button" onClick={() => void change(null)}>
                 unlock
               </button>
             )}

@@ -1,4 +1,5 @@
 import type { Raid } from './raid';
+import type { Team } from './team';
 
 export type Mode = 'weekly' | 'dates';
 export type SlotSize = 15 | 30 | 60;
@@ -61,5 +62,7 @@ export interface PollState {
   people: Person[];
   /** The raid locked in from best times, or null while the poll is still finding one. */
   raid: Raid | null;
+  /** Raid teams the organizer picked from the people here. */
+  teams: Team[];
   version: number;
 }

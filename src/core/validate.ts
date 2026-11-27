@@ -146,13 +146,22 @@ export function validateSettings(input: unknown, now = Date.now()): Result<PollS
     return fail('Raid length must be between 15 minutes and 12 hours.');
   }
 
-  const size = raw.size === undefined ? 0 : Number(raw.size);
+  const raid = validateRaidSize(raw.size, raw.makeup);
+  if (!raid.ok) return raid;
+  const { size, makeup } = raid.value;
+
+  return ok({ title, notes, mode, days, start, end, slot, tz, realm: realm as string, size, makeup, roles: roles.value, classes: classes.value, length });
+}
+
+/** A raid's size (0: any) and, with a size, the tanks and healers it wants. */
+export function validateRaidSize(rawSize: unknown, rawMakeup: unknown): Result<{ size: number; makeup: Record<string, number> }> {
+  const size = rawSize === undefined ? 0 : Number(rawSize);
   if (!Number.isInteger(size) || size < 0 || size === 1 || size > LIMITS.size) {
     return fail(`A raid holds between 2 and ${LIMITS.size} people.`);
   }
   const makeup: Record<string, number> = {};
   if (size > 0) {
-    const given = (raw.makeup ?? {}) as Record<string, unknown>;
+    const given = (rawMakeup ?? {}) as Record<string, unknown>;
     for (const role of ['tank', 'healer']) {
       const n = given[role] === undefined ? 0 : Number(given[role]);
       if (!Number.isInteger(n) || n < 0) return fail('Tanks and healers are whole numbers.');
@@ -160,8 +169,7 @@ export function validateSettings(input: unknown, now = Date.now()): Result<PollS
     }
     if (makeup.tank + makeup.healer > size) return fail(`A raid of ${size} can’t have that many tanks and healers.`);
   }
-
-  return ok({ title, notes, mode, days, start, end, slot, tz, realm: realm as string, size, makeup, roles: roles.value, classes: classes.value, length });
+  return ok({ size, makeup });
 }
 
 export function validateName(input: unknown): Result<string> {
