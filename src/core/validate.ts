@@ -150,7 +150,25 @@ export function validateSettings(input: unknown, now = Date.now()): Result<PollS
   if (!raid.ok) return raid;
   const { size, makeup } = raid.value;
 
-  return ok({ title, notes, mode, days, start, end, slot, tz, realm: realm as string, size, makeup, roles: roles.value, classes: classes.value, length });
+  const discordOnly = raw.discordOnly === true;
+
+  return ok({
+    title,
+    notes,
+    mode,
+    days,
+    start,
+    end,
+    slot,
+    tz,
+    realm: realm as string,
+    size,
+    makeup,
+    discordOnly,
+    roles: roles.value,
+    classes: classes.value,
+    length,
+  });
 }
 
 /** A raid's size (0: any) and, with a size, the tanks and healers it wants. */

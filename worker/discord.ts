@@ -1,4 +1,4 @@
-import { ID_PATTERN, randomToken, signed, unsigned } from './crypto';
+import { ID_PATTERN, randomToken, sha256, signed, unsigned } from './crypto';
 import { auth, error, json } from './http';
 
 // Signing in with Discord: OAuth2 with only the `identify` scope, so muster learns someone's Discord id
@@ -32,6 +32,8 @@ interface State {
   poll: string;
   /** Set when linking: the person to link the account to. */
   person?: string;
+  /** And the hash of that browser's token, which stays signed in when the others are signed out. */
+  keep?: string;
   nonce: string;
   exp: number;
 }
@@ -63,7 +65,12 @@ export async function discordStart(
     return error(404, 'This poll doesn’t exist.');
   }
   const nonce = randomToken();
-  const state = await signed({ poll: pollId, person, nonce, exp: Date.now() + STATE_MS } satisfies State, env.DISCORD_CLIENT_SECRET);
+  const token = auth(request).token;
+  const keep = person && token ? await sha256(token) : undefined;
+  const state = await signed(
+    { poll: pollId, person, keep, nonce, exp: Date.now() + STATE_MS } satisfies State,
+    env.DISCORD_CLIENT_SECRET,
+  );
   const authorize = new URL('/oauth2/authorize', env.DISCORD_ORIGIN);
   authorize.search = new URLSearchParams({
     client_id: env.DISCORD_CLIENT_ID,
@@ -132,7 +139,7 @@ export async function discordCallback(request: Request, env: Env, url: URL): Pro
 
   const poll = env.POLLS.getByName(pollId);
   if (state.person) {
-    const linked = await poll.linkDiscord(state.person, user);
+    const linked = await poll.linkDiscord(state.person, user, state.keep);
     return back(env, url, pollId, linked.ok ? { discord: 'linked', as: user.name } : { discord: 'taken' });
   }
   const signedIn = await poll.discordSignIn(user.id);

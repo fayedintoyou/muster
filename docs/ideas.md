@@ -79,7 +79,9 @@ teams whose raids overlap are flagged, and everyone on a team sees a line for it
 **Who is who.** A member claims themselves by name, with a private token kept by each browser. Done
 (PR #20): anyone can lock their answers with a password, change it or remove it, and link their Discord
 account. Once linked, "sign in with Discord" makes any device them, and a name alone no longer does.
-Ten wrong passwords in a row make claiming that person wait 15 minutes. The bot will use the same
+Ten wrong passwords in a row make claiming that person wait 15 minutes. Locking (a new password, or linking Discord)
+signs out every other browser that was that person (PR #24). A poll can also ask everyone to answer
+through Discord, so no name can be taken at all; its maker turns that on under "Who can answer?". The bot will use the same
 link to @ people and match their button presses to their answers.
 
 ## Matching Raid-Helper: what the guild relies on

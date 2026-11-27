@@ -59,6 +59,7 @@ export type Failure = {
   exists?: boolean;
   hasPassword?: boolean;
   discord?: boolean;
+  discordOnly?: boolean;
 };
 export type Outcome<T> = ({ ok: true } & T) | Failure;
 
@@ -138,6 +139,7 @@ export class PollObject extends DurableObject<Env> {
     // And server time, which WoW Forever's US realms keep on Central.
     if (poll.realm === undefined) upgraded = { ...upgraded, realm: REALM_TIME };
     if (poll.size === undefined) upgraded = { ...upgraded, size: 0, makeup: {} };
+    if (poll.discordOnly === undefined) upgraded = { ...upgraded, discordOnly: false };
     return upgraded;
   }
 
@@ -234,6 +236,9 @@ export class PollObject extends DurableObject<Env> {
       if (input.claim !== true) {
         return fail(409, `${existingBefore.name} has already answered.`, { exists: true, ...lock });
       }
+      if (this.poll()?.discordOnly && !discord) {
+        return fail(401, `This poll asks everyone to sign in with Discord.`, { ...lock, discordOnly: true });
+      }
       const sameDiscord = Boolean(discord && existingBefore.discord?.id === discord.id);
       if (existingBefore.discord && discord && !sameDiscord) {
         return fail(403, `${existingBefore.name} is linked to a different Discord account.`, lock);
@@ -270,6 +275,8 @@ export class PollObject extends DurableObject<Env> {
         if (other) return fail(409, `That Discord account is already linked to ${other.name}.`);
         current.discord = discord;
         current.updated = Date.now();
+        // Locking it signs out every other browser that was them, in case one wasn't.
+        current.tokens = [tokenHash];
       }
       // Times marked on this device only count if they hadn't marked any yet: signing in on a second
       // device mustn't wipe what they marked on the first.
@@ -295,6 +302,7 @@ export class PollObject extends DurableObject<Env> {
     const people = this.people();
     if (people.some((p) => p.key === key)) return fail(409, `${name.value} has already answered.`, { exists: true });
     if (people.length >= LIMITS.people) return fail(400, `This poll is full (${LIMITS.people} people).`);
+    if (poll.discordOnly && !discord) return fail(403, 'This poll asks everyone to sign in with Discord.', { discordOnly: true });
     const linkedTo = discord && people.find((p) => p.discord?.id === discord.id);
     if (linkedTo) return fail(409, `That Discord account is already linked to ${linkedTo.name}.`);
     const marks = input.marks === undefined ? undefined : cleanMarks(input.marks, new Set(slotKeys(poll)));
@@ -379,6 +387,8 @@ export class PollObject extends DurableObject<Env> {
       person.salt = secret?.salt;
       person.pass = secret?.hash;
       delete person.tries;
+      // A new password signs out every other browser that was them.
+      if (secret && tokenHash) person.tokens = [tokenHash];
     }
     if (input.discord === null) {
       if (!mine) return fail(403, 'Only they can unlink their Discord account.');
@@ -397,13 +407,19 @@ export class PollObject extends DurableObject<Env> {
   }
 
   /** Ties a Discord account to a person, once Discord has said whose it is. One person per account. */
-  async linkDiscord(personId: string, discord: { id: string; name: string }): Promise<Outcome<{ name: string }>> {
+  async linkDiscord(
+    personId: string,
+    discord: { id: string; name: string },
+    /** The hash of the token of the browser that linked it: the only one left signed in. */
+    keep?: string,
+  ): Promise<Outcome<{ name: string }>> {
     const person = this.kv.get<StoredPerson>(`p:${personId}`);
     if (!person) return fail(404, 'That person isn’t in this poll any more.');
     const other = this.people().find((p) => p.discord?.id === discord.id && p.id !== personId);
     if (other) return fail(409, `That Discord account is already linked to ${other.name}.`);
     person.discord = discord;
     person.updated = Date.now();
+    if (keep && person.tokens.includes(keep)) person.tokens = [keep];
     this.kv.put(`p:${personId}`, person);
     this.bump();
     return { ok: true, name: person.name };

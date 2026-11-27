@@ -98,6 +98,20 @@ export function JoinForm({
     void join(claim !== null);
   };
 
+  // A poll that wants everyone through Discord: that's the only way in.
+  if (poll.discordOnly && !discord) {
+    return (
+      <div className="join">
+        <h3 className="panel-title">Then, who’s this?</h3>
+        <p className="lede-small">
+          This poll asks everyone to sign in with Discord, so no one can take someone else’s name.
+          {marked > 0 && ' The times you’ve marked are kept.'}
+        </p>
+        <DiscordButton pollId={poll.id} label="sign in with discord" />
+      </div>
+    );
+  }
+
   if (claim) {
     return (
       <form className="join" onSubmit={submit} noValidate>

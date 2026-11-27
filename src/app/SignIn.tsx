@@ -97,10 +97,13 @@ export function MySignIn({
   pollId,
   me,
   token,
+  discordOnly = false,
   onPerson,
 }: {
   pollId: string;
   me: Person;
+  /** The poll asks everyone to sign in with Discord. */
+  discordOnly?: boolean;
   token?: string;
   onPerson: (person: Person) => void;
 }) {
@@ -127,8 +130,10 @@ export function MySignIn({
 
   return (
     <div className="my-lock">
-      <p className="muted">
-        {me.discord && me.hasPassword
+      <p className={discordOnly && !me.discord ? 'my-lock-ask' : 'muted'}>
+        {discordOnly && !me.discord
+          ? 'This poll asks everyone to link Discord. Until you do, anyone who types your name can change your answers.'
+          : me.discord && me.hasPassword
           ? 'Your answers are locked with a password, and linked to Discord.'
           : me.discord
             ? 'Your answers are linked to Discord: sign in with it on any device.'

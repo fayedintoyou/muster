@@ -284,10 +284,24 @@ try {
   // ---- Keeping answers yours: a password, then Discord ----
   if (discord) {
     assert.match(await p2.locator('.my-lock').innerText(), /Anyone who types your name/, 'unlocked to start with');
+    // While unlocked, someone else claims Bo on their own browser…
+    const impostor = await fetch(`${BASE}/api/polls/${pollId}/people`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Bo', claim: true }),
+    }).then((r) => r.json());
+    const asImpostor = () =>
+      fetch(`${BASE}/api/polls/${pollId}/people/${impostor.person.id}`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${impostor.token}` },
+        body: JSON.stringify({ note: 'not Bo' }),
+      }).then((r) => r.status);
+    assert.equal(await asImpostor(), 200, 'an unlocked name is anyone’s');
     await p2.click('.my-lock button:text("lock with a password")');
     await p2.fill('.my-lock input[type="password"]', 'healz4days');
     await p2.click('.my-lock button:text("save password")');
     await p2.waitForSelector('.my-lock :text("locked with a password")');
+    assert.equal(await asImpostor(), 403, '…and locking it signs every other browser out');
     const claimBo = (password) =>
       fetch(`${BASE}/api/polls/${pollId}/people`, {
         method: 'POST',
@@ -363,6 +377,49 @@ try {
       method: 'DELETE',
       headers: { authorization: `Bearer ${gus.token}` },
     });
+  }
+
+  // ---- A poll where everyone answers through Discord ----
+  if (discord) {
+    const locked = await fetch(`${BASE}/api/polls`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Discord only',
+        mode: 'weekly',
+        days: ['w4'],
+        start: 1200,
+        end: 1380,
+        slot: 30,
+        tz: 'America/Chicago',
+        classes: ['mage', 'priest'],
+        discordOnly: true,
+      }),
+    }).then((r) => r.json());
+    const byName = await fetch(`${BASE}/api/polls/${locked.id}/people`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Zed', cls: 'mage', specs: ['frost'] }),
+    });
+    assert.equal(byName.status, 403, 'a name alone can’t answer');
+    const only = await browser.newContext({ viewport: { width: 390, height: 844 }, timezoneId: 'America/Chicago' });
+    const p8 = await only.newPage();
+    watch(p8, 'discord-only');
+    await p8.goto(`${BASE}/e/${locked.id}`);
+    await p8.locator('.paint .cell[data-key="w4/1200"]').click();
+    assert.equal(await p8.locator('#join-name').count(), 0, 'no name field, only Discord');
+    assert.match(await p8.locator('.join').innerText(), /asks everyone to sign in with Discord/);
+    await shot(p8, '04f-phone-discord-only');
+    discordUser = { id: '408123456789012345', username: 'zed', global_name: 'Zed' };
+    await p8.click('.join button:text("sign in with discord")');
+    await p8.waitForSelector('.discord-joined');
+    assert.deepEqual(await marks(p8, 'w4'), { 'w4/1200': 2 }, 'the times marked before Discord are kept');
+    await p8.click('.join .class-chip:text-is("mage")');
+    await p8.click('.join .class-chip:text-is("frost")');
+    await p8.click('button:text("save my times")');
+    await p8.waitForSelector('.me-line');
+    assert.match(await p8.locator('.my-lock').innerText(), /linked to Discord/);
+    await only.close();
   }
 
   // ---- Two more people, straight through the API ----
