@@ -11,6 +11,9 @@ import { BestTimes } from './BestTimes';
 import { RaidBanner } from './RaidBanner';
 import { TeamsPanel } from './TeamsPanel';
 import { MySignIn, discordMessage, discordReturn } from './SignIn';
+import { EventPanel, SignupButtons } from './Signups';
+import { nextRaid } from '../core/raid';
+import { POLL_RAID, eventKey } from '../core/signup';
 import { slotLabel } from './GridFrame';
 import { HeatGrid } from './HeatGrid';
 import { JoinForm } from './JoinForm';
@@ -410,9 +413,27 @@ export function PollPage({ id }: { id: string }) {
           )}
           {state.teams
             .filter((t) => t.raid && me && t.members.includes(me.id))
-            .map((t) => (
-              <RaidBanner key={t.id} poll={poll} raid={t.raid!} zone={zone} label={`your team, ${t.name}:`} compact />
-            ))}
+            .map((t) => {
+              const next = nextRaid(poll, t.raid!);
+              return (
+                <RaidBanner key={t.id} poll={poll} raid={t.raid!} zone={zone} label={`your team, ${t.name}:`} compact>
+                  {next && me && (
+                    <>
+                      {' '}
+                      <SignupButtons
+                        pollId={id}
+                        owner={t.id}
+                        night={next.night}
+                        me={me}
+                        current={state.signups[eventKey(t.id, next.night)]?.people[me.id]}
+                        auth={{ token: membership.token }}
+                        onState={applyState}
+                      />
+                    </>
+                  )}
+                </RaidBanner>
+              );
+            })}
           {state.raid && (
             <RaidBanner
               poll={poll}
@@ -424,7 +445,22 @@ export function PollPage({ id }: { id: string }) {
                       applyState(raid ? await api.lockRaid(id, membership.admin!, raid) : await api.unlockRaid(id, membership.admin!))
                   : undefined
               }
-            />
+            >
+              <details className="event-details">
+                <summary>sign-ups</summary>
+                <EventPanel
+                  poll={poll}
+                  state={state}
+                  owner={POLL_RAID}
+                  raid={state.raid}
+                  team={null}
+                  zone={zone}
+                  me={me}
+                  auth={{ token: membership.token, admin: membership.admin }}
+                  onState={applyState}
+                />
+              </details>
+            </RaidBanner>
           )}
           {justMade ? (
             <div className="share-panel" role="status">
@@ -768,6 +804,7 @@ export function PollPage({ id }: { id: string }) {
               zone={zone}
               admin={membership.admin}
               meId={me?.id}
+              token={membership.token}
               nameOf={nameOf}
               onState={applyState}
             />

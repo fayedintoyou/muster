@@ -45,13 +45,15 @@ export interface Seating {
 
 /**
  * Seats as many of `people` as the raid holds, those available for sure before those free only if needed.
- * It's a matching, so one person moving from dps to tank to make room counts.
+ * It's a matching, so one person moving from dps to tank to make room counts. With `order`, people are
+ * placed in that order instead: whoever comes first keeps their seat.
  */
 export function seat(
   people: Person[],
   available: ReadonlySet<string>,
   size: number,
   makeup: Record<string, number>,
+  order?: string[],
 ): Seating {
   const want = seatsFor(size, makeup);
   const playable = new Map(people.map((p) => [p.id, p.roles.filter((r) => (want[r] ?? 0) > 0)]));
@@ -81,13 +83,15 @@ export function seat(
   };
 
   // Sure before if-needed; then those with fewer roles, who are harder to place.
-  const order = [...people].sort(
-    (a, b) =>
-      Number(available.has(b.id)) - Number(available.has(a.id)) ||
-      (playable.get(a.id)?.length ?? 0) - (playable.get(b.id)?.length ?? 0),
-  );
+  const placing = order ?? [...people]
+    .sort(
+      (a, b) =>
+        Number(available.has(b.id)) - Number(available.has(a.id)) ||
+        (playable.get(a.id)?.length ?? 0) - (playable.get(b.id)?.length ?? 0),
+    )
+    .map((p) => p.id);
   const extra: string[] = [];
-  for (const p of order) if (!place(p.id, new Set())) extra.push(p.id);
+  for (const id of placing) if (!place(id, new Set())) extra.push(id);
 
   const seated = people.filter((p) => roleOf.has(p.id)).map((p) => ({ id: p.id, role: roleOf.get(p.id)! }));
   return {
