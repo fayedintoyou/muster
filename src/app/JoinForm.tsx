@@ -8,7 +8,7 @@ import { RoleIcon } from './icons';
 import { DiscordButton } from './SignIn';
 import { DiscordIcon } from './icons';
 
-// Who's answering, after they've marked their times: a name or in-game handle, their class and a spec or
+// Who's answering, after they've marked their times: their character's name, their class and a spec or
 // two (which say what roles they bring), and a note if they like. Saving sends the times along with it.
 export function JoinForm({
   poll,
@@ -23,7 +23,8 @@ export function JoinForm({
   discord?: { name: string; ticket: string };
   onJoined: (person: Person, token: string, state: PollState) => void;
 }) {
-  const [name, setName] = useState(() => store.lastName() || discord?.name || '');
+  // A character's name, not a Discord one, so Discord doesn't fill it in.
+  const [name, setName] = useState(() => store.lastName());
   const [roles, setRoles] = useState<string[]>(() => store.lastRoles().filter((r) => poll.roles.includes(r)));
   const [cls, setCls] = useState(() => (poll.classes.includes(store.lastClass()) ? store.lastClass() : ''));
   const [specs, setSpecs] = useState<string[]>(() => (cls ? store.lastSpecs() : []));
@@ -173,12 +174,12 @@ export function JoinForm({
           <DiscordIcon />
           <span>
             Signed in with Discord as <strong>{discord.name}</strong>. Save your times and they’re linked to it, so
-            Discord signs you in anywhere. Answered here before on another device? Use the same name.
+            Discord signs you in anywhere. Answered here before on another device? Use the same character name.
           </span>
         </p>
       )}
       <div className="field">
-        <label htmlFor="join-name">Name or in-game handle</label>
+        <label htmlFor="join-name">Character name</label>
         <input
           id="join-name"
           ref={nameField}
@@ -191,18 +192,18 @@ export function JoinForm({
           aria-describedby={nameMissing ? 'join-name-missing' : undefined}
           maxLength={LIMITS.name}
           autoComplete="nickname"
-          placeholder="What the guild calls you"
+          placeholder="Your main, as it shows in game"
           required
         />
         {nameMissing && (
           <p className="error" id="join-name-missing" role="alert">
-            Add your name or in-game handle.
+            Add your character’s name.
           </p>
         )}
         {!discord && (
           <>
             <p className="hint">
-              Answered already on another device? Use the same name to pick up where you left off, or sign in with
+              Answered already on another device? Use the same character name to pick up where you left off, or sign in with
               Discord.
             </p>
             <DiscordButton pollId={poll.id} label="sign in with discord" small />
@@ -257,7 +258,7 @@ export function JoinForm({
           placeholder="Anything your times don’t say, like “Fridays I might be 30 minutes late”"
         />
       </div>
-      {locking ? (
+      {discord ? null : locking ? (
         <div className="field">
           <label htmlFor="join-password">Password (optional)</label>
           <input
