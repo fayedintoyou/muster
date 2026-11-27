@@ -75,5 +75,7 @@ export interface PollState {
   teams: Team[];
   /** Who's coming on each raid night from yesterday on, by event key ('<team or raid>/<night>'). */
   signups: Record<string, EventSignups>;
+  /** People the poll's maker made officers: they organize it too, signed in with Discord. */
+  officers: string[];
   version: number;
 }

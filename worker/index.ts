@@ -92,6 +92,19 @@ async function api(request: Request, env: Env, url: URL): Promise<Response> {
     return result.ok ? json(result.state) : fromFailure(result);
   }
 
+  // /organize: an officer's organizer token; /officers/<person>: the maker picking officers.
+  if (parts[3] === 'organize' && parts.length === 4) {
+    if (method !== 'POST') return error(405, 'Method not allowed.');
+    const result = await poll.organize(auth(request).token);
+    return result.ok ? json({ admin: result.admin }) : fromFailure(result);
+  }
+  if (parts[3] === 'officers' && parts.length === 5) {
+    if (!ID_PATTERN.test(parts[4])) return error(404, 'Not found.');
+    if (method !== 'PUT' && method !== 'DELETE') return error(405, 'Method not allowed.');
+    const result = await poll.setOfficer(auth(request).admin, parts[4], method === 'PUT');
+    return result.ok ? json(result.state) : fromFailure(result);
+  }
+
   if (parts[3] === 'raid' && parts.length === 4) {
     if (method === 'PUT') {
       const body = await readJson(request);

@@ -184,9 +184,28 @@ export function PollPage({ id }: { id: string }) {
   const poll = state?.poll;
   const me = state?.people.find((p) => p.id === membership.personId);
 
+  // An officer organizes from their own Discord sign-in, and stops when they're stood down.
+  const officer = Boolean(me && me.discord && state?.officers.includes(me.id));
+  const organizing = useRef(false);
+  useEffect(() => {
+    if (!state) return;
+    if (membership.officer && !officer) {
+      setMembership({ personId: membership.personId, token: membership.token });
+    } else if (officer && !membership.admin && membership.token && !organizing.current) {
+      organizing.current = true;
+      api
+        .organize(id, membership.token)
+        .then(({ admin }) => setMembership({ ...store.membership(id), admin, officer: true }))
+        .catch(() => {})
+        .finally(() => {
+          organizing.current = false;
+        });
+    }
+  }, [state, officer, membership, id, setMembership]);
+
   // Removed from the poll (by its maker, or on another device): back to the join form.
   useEffect(() => {
-    if (state && membership.personId && !me) setMembership({ admin: membership.admin });
+    if (state && membership.personId && !me) setMembership(signedOut(membership));
   }, [state, me, membership, setMembership]);
 
   useEffect(() => {
@@ -416,7 +435,7 @@ export function PollPage({ id }: { id: string }) {
   const removePerson = async (pid: string) => {
     await api.remove(id, pid, { token: pid === me?.id ? membership.token : undefined, admin: membership.admin });
     if (pid === me?.id) {
-      setMembership({ admin: membership.admin });
+      setMembership(signedOut(membership));
       setDraft(null);
     }
     const next = await api.read(id);
@@ -562,7 +581,7 @@ export function PollPage({ id }: { id: string }) {
                     type="button"
                     className="text-button"
                     onClick={() => {
-                      setMembership({ admin: membership.admin });
+                      setMembership(signedOut(membership));
                       setDraft(null);
                     }}
                   >
@@ -866,6 +885,7 @@ export function PollPage({ id }: { id: string }) {
             <Organizer
               state={state}
               admin={membership.admin}
+              maker={!membership.officer}
               meId={me?.id}
               onState={applyState}
               onPerson={(person) =>
@@ -882,4 +902,9 @@ export function PollPage({ id }: { id: string }) {
       {touring && <Tour steps={ANSWER_TOUR} onClose={() => setTouring(false)} />}
     </div>
   );
+}
+
+/** Signing out keeps the maker's private link, but an officer's organizer token goes with them. */
+function signedOut(m: Membership): Membership {
+  return m.officer ? {} : { admin: m.admin };
 }

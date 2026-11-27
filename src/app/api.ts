@@ -152,6 +152,14 @@ export const api = {
       body: JSON.stringify(link ? { person: link.person } : {}),
     });
   },
+  /** An officer's organizer token, from their own sign-in. */
+  organize(id: string, token: string) {
+    return call<{ admin: string }>(`/api/polls/${id}/organize`, { method: 'POST', token });
+  },
+  /** The maker makes someone an officer, or stands them down. */
+  officer(id: string, personId: string, admin: string, officer: boolean) {
+    return call<PollState>(`/api/polls/${id}/officers/${personId}`, { method: officer ? 'PUT' : 'DELETE', admin });
+  },
   /** Takes off someone's password and Discord link, for an organizer helping them back in. */
   unlock(id: string, personId: string, admin: string) {
     return call<PollState>(`/api/polls/${id}/people/${personId}/unlock`, { method: 'POST', admin });
