@@ -72,7 +72,26 @@ export function PollPage({ id }: { id: string }) {
   const [tool, setTool] = useState<Mark>(2);
   const [draft, setDraft] = useState<Marks | null>(null);
   /** Times marked before saying who you are; they go along with the join. */
-  const [unsaved, setUnsaved] = useState<Marks>({});
+  // Kept for this tab, so a trip to Discord to sign in doesn't lose what you'd marked.
+  const [unsaved, setUnsavedState] = useState<Marks>(() => {
+    try {
+      return JSON.parse(sessionStorage.getItem(`muster:unsaved:${id}`) ?? '{}') as Marks;
+    } catch {
+      return {};
+    }
+  });
+  const setUnsaved = useCallback(
+    (marks: Marks) => {
+      setUnsavedState(marks);
+      try {
+        if (Object.keys(marks).length) sessionStorage.setItem(`muster:unsaved:${id}`, JSON.stringify(marks));
+        else sessionStorage.removeItem(`muster:unsaved:${id}`);
+      } catch {
+        // Private browsing: the marks just don't survive a reload.
+      }
+    },
+    [id],
+  );
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [saveError, setSaveError] = useState('');
   const [excluded, setExcluded] = useState<ReadonlySet<string>>(new Set());
@@ -626,6 +645,7 @@ export function PollPage({ id }: { id: string }) {
                   pollId={id}
                   me={me}
                   token={membership.token}
+                  discordOnly={poll.discordOnly}
                   onPerson={(person) => {
                     mine.current = { id: person.id, updated: person.updated };
                     setState(

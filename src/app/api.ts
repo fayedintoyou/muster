@@ -7,7 +7,7 @@ export class ApiError extends Error {
   constructor(
     message: string,
     readonly status: number,
-    readonly extra: { exists?: boolean; hasPassword?: boolean; discord?: boolean } = {},
+    readonly extra: { exists?: boolean; hasPassword?: boolean; discord?: boolean; discordOnly?: boolean } = {},
   ) {
     super(message);
   }

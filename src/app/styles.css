@@ -664,6 +664,7 @@ option { background: var(--wall); color: var(--ink); }
 /* How your answers are kept yours: a password, Discord, or neither. */
 .my-lock { margin-top: 1.1rem; max-width: 30rem; font-size: 0.875rem; }
 .my-lock > .muted { margin: 0 0 0.25rem; }
+.my-lock-ask { margin: 0 0 0.5rem; color: var(--ink); }
 .my-lock-actions { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.25rem 1.1rem; }
 .my-lock-form { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; }
 .my-lock-form label { flex-basis: 100%; color: var(--muted); }

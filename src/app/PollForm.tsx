@@ -27,6 +27,7 @@ export const DEFAULT_SETTINGS: PollSettings = {
   length: 180,
   size: 0,
   makeup: {},
+  discordOnly: false,
 };
 
 const LENGTHS = Array.from({ length: 16 }, (_, i) => (i + 1) * 30);
@@ -67,6 +68,7 @@ export function PollForm({
   const [length, setLength] = useState(initial.length);
   const [size, setSize] = useState(initial.size);
   const [makeup, setMakeup] = useState(initial.makeup);
+  const [discordOnly, setDiscordOnly] = useState(initial.discordOnly);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -86,6 +88,7 @@ export function PollForm({
     length,
     size,
     makeup: size ? makeup : {},
+    discordOnly,
   };
 
   const times = useMemo(() => Array.from({ length: 1440 / slot }, (_, i) => i * slot), [slot]);
@@ -236,6 +239,19 @@ export function PollForm({
           {size
             ? `Best times seats each person once, in a role they play, and shows what a ${size} still needs.`
             : 'Pick a size to see which nights fill a raid.'}
+        </p>
+      </fieldset>
+
+      <fieldset className="field">
+        <legend>Who can answer?</legend>
+        <label className="check">
+          <input type="checkbox" checked={discordOnly} onChange={(e) => setDiscordOnly(e.target.checked)} />
+          <span>Everyone signs in with Discord to answer</span>
+        </label>
+        <p className="hint">
+          {discordOnly
+            ? 'No one can take someone else’s name, and everyone can sign in again on any device.'
+            : 'Without it, anyone who types a name can change those answers, unless that person locked them.'}
         </p>
       </fieldset>
 
