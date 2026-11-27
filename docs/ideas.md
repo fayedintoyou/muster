@@ -70,10 +70,11 @@ gets first claim on the seats:
 So a team's regulars are never bumped by an outsider, and a team that's short fills itself from the
 guild without anyone having to ask. A team can also be set to "team only" for a closed run.
 
-**Today's polls become a team's way to find its time.** A poll stays usable on its own for a quick
-"when can we all play?". A team's best times read its roster's answers, over the hours that team raids.
-Locking in a time sets the team's schedule. Existing polls and answers keep working: a poll can be turned
-into a team, and its people into members.
+**The poll stays as it is: everyone answers once, for the guild.** Organizers read everyone's answers,
+then split people into teams and find each team its own time. Done (PR #19): a poll's maker makes
+teams on its "teams" tab (name, size and make-up, people picked from everyone who answered). Each team
+has its own best times, read from its members' answers only, and locks in its own raid. People on two
+teams whose raids overlap are flagged, and everyone on a team sees a line for it at the top of the poll.
 
 **Who is who.** Until Discord sign-in, a member claims themselves by name with a private token, as poll
 answers do now. Discord sign-in later ties that member to their Discord account, and then muster can @
@@ -179,8 +180,7 @@ web requests, so no bot program has to keep running.
 
 **Before December 9: one complete path for Barrow Deeps, on the web.**
 1. Lock in a time. Done (PR #17).
-2. A guild, its members and its teams, on the web. The pilot poll becomes the first team; officers use a
-   private link.
+2. Teams picked from the poll, each with its own best times and lock-in. Done (PR #19).
 3. Events from each team's schedule, plus one-off events, with sign-ups (in, late with a time, tentative,
    out) and the roster: team first, then the guild, then standby. "Usually free" fills in a first guess.
 4. Dated absences, on the member, so they apply to every team.

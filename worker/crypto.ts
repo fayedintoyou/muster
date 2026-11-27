@@ -10,6 +10,7 @@ export function randomId(length = 8): string {
 }
 
 export const ID_PATTERN = /^[23456789abcdefghjkmnpqrstuvwxyz]{8}$/;
+export const TEAM_ID = /^[23456789abcdefghjkmnpqrstuvwxyz]{6}$/;
 
 function toHex(buffer: ArrayBuffer | Uint8Array): string {
   const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);

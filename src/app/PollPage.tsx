@@ -9,6 +9,7 @@ import { ApiError, api } from './api';
 import { Wordmark, navigate } from './App';
 import { BestTimes } from './BestTimes';
 import { RaidBanner } from './RaidBanner';
+import { TeamsPanel } from './TeamsPanel';
 import { slotLabel } from './GridFrame';
 import { HeatGrid } from './HeatGrid';
 import { JoinForm } from './JoinForm';
@@ -23,7 +24,7 @@ import { useCopied } from './copy';
 import { GLOW_GRADIENT } from './glow';
 import { type Membership, detectedZone, store } from './store';
 
-type Tab = 'mine' | 'group' | 'best';
+type Tab = 'mine' | 'group' | 'best' | 'teams';
 type SaveState = 'idle' | 'waiting' | 'saving' | 'saved' | 'error';
 
 const REFRESH_MS = 15_000;
@@ -388,8 +389,23 @@ export function PollPage({ id }: { id: string }) {
             </span>
           </p>
           {poll.notes && <p className="poll-notes">{poll.notes}</p>}
+          {state.teams
+            .filter((t) => t.raid && me && t.members.includes(me.id))
+            .map((t) => (
+              <RaidBanner key={t.id} poll={poll} raid={t.raid!} zone={zone} label={`your team, ${t.name}:`} compact />
+            ))}
           {state.raid && (
-            <RaidBanner poll={poll} raid={state.raid} zone={zone} admin={membership.admin} onState={applyState} />
+            <RaidBanner
+              poll={poll}
+              raid={state.raid}
+              zone={zone}
+              onChange={
+                membership.admin
+                  ? async (raid) =>
+                      applyState(raid ? await api.lockRaid(id, membership.admin!, raid) : await api.unlockRaid(id, membership.admin!))
+                  : undefined
+              }
+            />
           )}
           {justMade ? (
             <div className="share-panel" role="status">
@@ -419,6 +435,9 @@ export function PollPage({ id }: { id: string }) {
               ['mine', me ? 'your times' : 'mark your times'],
               ['group', `everyone (${answeredCount})`],
               ['best', 'best times'],
+              ...(state.teams.length > 0 || membership.admin
+                ? ([['teams', state.teams.length ? `teams (${state.teams.length})` : 'teams']] as const)
+                : []),
             ] as const
           ).map(([key, label]) => (
             <button
@@ -708,6 +727,21 @@ export function PollPage({ id }: { id: string }) {
             )}
           </section>
         </div>
+
+        {activeTab === 'teams' && (
+          <section className="panel panel-teams" id="panel-teams" role="tabpanel" aria-labelledby="tab-teams">
+            <TeamsPanel
+              poll={poll}
+              state={state}
+              grid={grid}
+              zone={zone}
+              admin={membership.admin}
+              meId={me?.id}
+              nameOf={nameOf}
+              onState={applyState}
+            />
+          </section>
+        )}
 
         {membership.admin && <AdminPanel state={state} admin={membership.admin} onState={applyState} />}
       </main>

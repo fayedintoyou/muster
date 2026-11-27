@@ -32,6 +32,8 @@ export function BestTimes({
   zone,
   raid,
   onLock,
+  size = poll.size,
+  makeup = poll.makeup,
 }: {
   poll: Poll;
   grid: Grid;
@@ -46,6 +48,9 @@ export function BestTimes({
   raid?: Raid | null;
   /** For the poll's maker: lock in a window as the raid. */
   onLock?: (start: string, minutes: number) => Promise<void>;
+  /** The raid's size and make-up, when not the poll's own (a team's). */
+  size?: number;
+  makeup?: Record<string, number>;
 }) {
   const [copied, copy] = useCopied();
   const [showAll, setShowAll] = useState(false);
@@ -59,9 +64,9 @@ export function BestTimes({
         required,
         roles: poll.roles,
         limit: 14,
-        raid: poll.size ? { size: poll.size, makeup: poll.makeup } : undefined,
+        raid: size ? { size, makeup } : undefined,
       }),
-    [grid, length, people, required, poll.roles, poll.size, poll.makeup],
+    [grid, length, people, required, poll.roles, size, makeup],
   );
   const lengths = LENGTHS.includes(length) ? LENGTHS : [...LENGTHS, length].sort((a, b) => a - b);
   const total = people.length;

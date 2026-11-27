@@ -930,3 +930,25 @@ button.row-head:hover { color: var(--lamp); }
 .raid-off { color: var(--muted); }
 .raid-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1rem; margin-top: 0.9rem; }
 .best-lock { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+
+/* Raid teams, picked from everyone who answered. */
+.panels[data-tab='teams'] { display: none; }
+.teams { display: grid; gap: 2rem; max-width: 44rem; }
+.team { padding-top: 1.2rem; border-top: 1px solid var(--line); }
+.team-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.4rem 1rem; }
+.team-head h3 { margin: 0; font-size: 1.4rem; font-weight: 400; }
+.team-size { margin: 0; color: var(--muted); font-family: var(--mono); font-size: 0.75rem; }
+.team-roster { list-style: none; margin: 0.6rem 0 0; padding: 0; display: grid; gap: 0.3rem; }
+.team-roster li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 0.75rem; }
+.team-clash { margin-top: 0.8rem; }
+.team-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1rem; margin-top: 1rem; }
+.team-best { margin-top: 1.25rem; }
+.team .raid-banner { margin-top: 1rem; }
+.team-form { display: grid; gap: 0.25rem; }
+.team-pick { list-style: none; margin: 0.6rem 0 0; padding: 0; display: grid; gap: 0.15rem; }
+.team-pick li { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.2rem 1rem; padding: 0.35rem 0; border-bottom: 1px solid var(--line); }
+.team-pick .person-meta { display: flex; flex-wrap: wrap; gap: 0.2rem 0.75rem; font-family: var(--mono); font-size: 0.75rem; }
+
+.raid-line { margin: 0.9rem 0 0; padding: 0.55rem 0 0.6rem; border-top: 1px solid var(--line); font-size: 0.9375rem; }
+.raid-line .raid-label { margin: 0 0.4rem 0 0; display: inline; }
+.raid-line + .raid-banner, .raid-line + .raid-line { margin-top: 0; }

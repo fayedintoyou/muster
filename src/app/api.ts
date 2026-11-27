@@ -1,5 +1,6 @@
 import type { Marks, Person, PollSettings, PollState } from '../core/types';
 import type { Raid } from '../core/raid';
+import type { Team } from '../core/team';
 
 export class ApiError extends Error {
   constructor(
@@ -53,6 +54,23 @@ export const api = {
   },
   unlockRaid(id: string, admin: string) {
     return call<PollState>(`/api/polls/${id}/raid`, { method: 'DELETE', admin });
+  },
+  saveTeam(id: string, admin: string, team: Pick<Team, 'name' | 'members' | 'size' | 'makeup'>, teamId?: string) {
+    return call<PollState>(teamId ? `/api/polls/${id}/teams/${teamId}` : `/api/polls/${id}/teams`, {
+      method: teamId ? 'PUT' : 'POST',
+      admin,
+      body: JSON.stringify(team),
+    });
+  },
+  deleteTeam(id: string, admin: string, teamId: string) {
+    return call<PollState>(`/api/polls/${id}/teams/${teamId}`, { method: 'DELETE', admin });
+  },
+  lockTeamRaid(id: string, admin: string, teamId: string, raid: Pick<Raid, 'start' | 'minutes' | 'skips'> | null) {
+    return call<PollState>(`/api/polls/${id}/teams/${teamId}/raid`, {
+      method: raid ? 'PUT' : 'DELETE',
+      admin,
+      ...(raid ? { body: JSON.stringify(raid) } : {}),
+    });
   },
   destroy(id: string, admin: string) {
     return call<{ ok: true }>(`/api/polls/${id}`, { method: 'DELETE', admin });

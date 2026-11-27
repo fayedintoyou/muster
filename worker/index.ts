@@ -1,5 +1,5 @@
 import { PollObject, type Failure } from './poll-object';
-import { ID_PATTERN, randomId, randomToken, sha256 } from './crypto';
+import { ID_PATTERN, TEAM_ID, randomId, randomToken, sha256 } from './crypto';
 import { validateSettings } from '../src/core/validate';
 import { describePoll } from './describe';
 
@@ -99,6 +99,36 @@ async function api(request: Request, env: Env, url: URL): Promise<Response> {
       return result.ok ? json(result.state) : fromFailure(result);
     }
     return error(405, 'Method not allowed.');
+  }
+
+  if (parts[3] === 'teams') {
+    const admin = auth(request).admin;
+    const teamId = parts[4];
+    if (parts.length === 4 && method === 'POST') {
+      const body = await readJson(request);
+      if (body instanceof Response) return body;
+      const result = await poll.saveTeam(admin, undefined, body);
+      return result.ok ? json(result.state, 201) : fromFailure(result);
+    }
+    if (parts.length === 5 && TEAM_ID.test(teamId)) {
+      if (method === 'PUT' || method === 'DELETE') {
+        const body = method === 'PUT' ? await readJson(request) : null;
+        if (body instanceof Response) return body;
+        const result = method === 'PUT' ? await poll.saveTeam(admin, teamId, body) : await poll.deleteTeam(admin, teamId);
+        return result.ok ? json(result.state) : fromFailure(result);
+      }
+      return error(405, 'Method not allowed.');
+    }
+    if (parts.length === 6 && parts[5] === 'raid' && TEAM_ID.test(teamId)) {
+      if (method === 'PUT' || method === 'DELETE') {
+        const body = method === 'PUT' ? await readJson(request) : null;
+        if (body instanceof Response) return body;
+        const result = await poll.lockTeamRaid(admin, teamId, body);
+        return result.ok ? json(result.state) : fromFailure(result);
+      }
+      return error(405, 'Method not allowed.');
+    }
+    return error(404, 'Not found.');
   }
 
   if (parts[3] !== 'people') return error(404, 'Not found.');
