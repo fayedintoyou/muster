@@ -742,6 +742,48 @@ try {
   const visibleRows = Math.floor((844 - 12 - s0.y) / 31);
   assert.ok(satMaybe > visibleRows, `the drag kept painting past the first screen (${satMaybe} slots, ${visibleRows} visible)`);
 
+  // ---- The organizer tab: helping someone locked out, renaming, closing to new answers ----
+  const joinPoll = (body) =>
+    fetch(`${BASE}/api/polls/${pollId}/people`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  const hal = await (await joinPoll({ name: 'Hal', cls: 'mage', specs: ['frost'], password: 'forgotten' })).json();
+  await p1.reload();
+  await p1.waitForSelector('.tabs');
+  await p1.click('#tab-organizer');
+  const halRow = p1.locator('.org-people li', { hasText: 'Hal' });
+  assert.match(await halRow.locator('.org-meta').innerText(), /password/, 'the organizer sees who’s locked');
+  assert.match(await p1.locator('.organizer').innerText(), /No times yet: .*Hal/, 'and who hasn’t marked times');
+  await halRow.locator('.org-person-actions button:text("unlock")').click();
+  assert.match(await halRow.locator('.org-do').innerText(), /Take off Hal’s password/);
+  await halRow.locator('.org-do button:text("unlock")').click();
+  await halRow.locator('.org-person-actions').waitFor();
+  assert.doesNotMatch(await halRow.locator('.org-meta').innerText(), /password/, 'unlocked');
+  const halSaves = await fetch(`${BASE}/api/polls/${pollId}/people/${hal.person.id}`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${hal.token}` },
+    body: JSON.stringify({ note: 'still me?' }),
+  });
+  assert.equal(halSaves.status, 403, 'unlocking signs them out everywhere');
+  assert.equal((await joinPoll({ name: 'Hal', claim: true })).status, 201, 'then they sign back in by name');
+  await halRow.locator('button:text("rename")').click();
+  await halRow.locator('.org-do input').fill('Halric');
+  await halRow.locator('.org-do button:text("rename")').click();
+  await p1.locator('.org-name', { hasText: 'Halric' }).waitFor();
+  // Closed: no one new, but people who've answered still sign in.
+  await p1.click('.org-closed button:text("close to new answers")');
+  await p1.locator('.org-status').waitFor();
+  const ivy = await joinPoll({ name: 'Ivy', cls: 'rogue', specs: ['combat'] });
+  assert.equal(ivy.status, 403, 'a closed poll takes no new answers');
+  assert.equal((await ivy.json()).closed, true);
+  assert.equal((await joinPoll({ name: 'Halric', claim: true })).status, 201, 'but someone who answered can still sign in');
+  await shot(p1, '12-organizer-phone');
+  await p1.click('.org-closed button:text("open to new answers")');
+  await p1.locator('.org-closed button:text("close to new answers")').waitFor();
+  assert.equal((await joinPoll({ name: 'Ivy', cls: 'rogue', specs: ['combat'] })).status, 201, 'opened again');
+
   // ---- Specific dates, made on a desktop with the calendar, then edited ----
   const p5 = await desk.newPage();
   watch(p5, 'desk-dates');
@@ -758,10 +800,11 @@ try {
   await p5.waitForSelector('.share-panel');
   const heads = await p5.locator('.paint-wrap .col-head, .join').count();
   assert.ok(heads > 0);
-  await p5.click('.admin summary');
-  await p5.fill('.admin #poll-title', 'Launch week raids');
-  await p5.click('.admin button:text("save changes")');
-  await p5.waitForSelector('.admin button:text("saved")');
+  await p5.click('#tab-organizer');
+  await p5.click('.org-edit summary');
+  await p5.fill('.org-edit #poll-title', 'Launch week raids');
+  await p5.click('.org-edit button:text("save changes")');
+  await p5.waitForSelector('.org-edit button:text("saved")');
   assert.equal(await p5.locator('h1.title').innerText(), 'Launch week raids', 'editing renames the poll');
   await shot(p5, '11-dates-admin-desk');
 

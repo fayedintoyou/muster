@@ -7,7 +7,7 @@ export class ApiError extends Error {
   constructor(
     message: string,
     readonly status: number,
-    readonly extra: { exists?: boolean; hasPassword?: boolean; discord?: boolean; discordOnly?: boolean } = {},
+    readonly extra: { exists?: boolean; hasPassword?: boolean; discord?: boolean; discordOnly?: boolean; closed?: boolean } = {},
   ) {
     super(message);
   }
@@ -151,6 +151,10 @@ export const api = {
       token: link?.token,
       body: JSON.stringify(link ? { person: link.person } : {}),
     });
+  },
+  /** Takes off someone's password and Discord link, for an organizer helping them back in. */
+  unlock(id: string, personId: string, admin: string) {
+    return call<PollState>(`/api/polls/${id}/people/${personId}/unlock`, { method: 'POST', admin });
   },
   remove(id: string, personId: string, auth: { token?: string; admin?: string }) {
     return call<{ version: number }>(`/api/polls/${id}/people/${personId}`, { method: 'DELETE', ...auth });

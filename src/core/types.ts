@@ -31,6 +31,8 @@ export interface PollSettings {
   makeup: Record<string, number>;
   /** Everyone answers by signing in with Discord, so no one can take someone else's name. */
   discordOnly: boolean;
+  /** Closed to new answers: only people who've answered already can sign in and change theirs. */
+  closed: boolean;
 }
 
 export interface Poll extends PollSettings {

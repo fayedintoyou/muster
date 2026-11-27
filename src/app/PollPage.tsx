@@ -20,7 +20,7 @@ import { HeatGrid } from './HeatGrid';
 import { JoinForm } from './JoinForm';
 import { PaintGrid } from './PaintGrid';
 import { People } from './People';
-import { PollForm } from './PollForm';
+import { Organizer } from './Organizer';
 import { ZonePicker } from './ZonePicker';
 import { ClassPicker } from './ClassPicker';
 import { Composition } from './Composition';
@@ -29,7 +29,7 @@ import { useCopied } from './copy';
 import { GLOW_GRADIENT } from './glow';
 import { type Membership, detectedZone, store } from './store';
 
-type Tab = 'mine' | 'group' | 'best' | 'teams';
+type Tab = 'mine' | 'group' | 'best' | 'teams' | 'organizer';
 type SaveState = 'idle' | 'waiting' | 'saving' | 'saved' | 'error';
 
 const REFRESH_MS = 15_000;
@@ -512,7 +512,7 @@ export function PollPage({ id }: { id: string }) {
                 </button>
               </div>
               <p className="hint">
-                To edit this poll from another device, copy the organizer link under “Change this poll”.
+                To edit this poll from another device, copy the private link from the organizer tab.
               </p>
             </div>
           ) : (
@@ -531,6 +531,7 @@ export function PollPage({ id }: { id: string }) {
               ...(state.teams.length > 0 || membership.admin
                 ? ([['teams', state.teams.length ? `teams (${state.teams.length})` : 'teams']] as const)
                 : []),
+              ...(membership.admin ? ([['organizer', 'organizer']] as const) : []),
             ] as const
           ).map(([key, label]) => (
             <button
@@ -860,91 +861,25 @@ export function PollPage({ id }: { id: string }) {
           </section>
         )}
 
-        {membership.admin && <AdminPanel state={state} admin={membership.admin} onState={applyState} />}
+        {activeTab === 'organizer' && membership.admin && (
+          <section className="panel panel-organizer" id="panel-organizer" role="tabpanel" aria-labelledby="tab-organizer">
+            <Organizer
+              state={state}
+              admin={membership.admin}
+              meId={me?.id}
+              onState={applyState}
+              onPerson={(person) =>
+                setState(
+                  (prev) =>
+                    prev && { ...prev, people: prev.people.map((p) => (p.id === person.id ? { ...person, marks: p.marks } : p)) },
+                )
+              }
+              onRemove={removePerson}
+            />
+          </section>
+        )}
       </main>
       {touring && <Tour steps={ANSWER_TOUR} onClose={() => setTouring(false)} />}
     </div>
-  );
-}
-
-function AdminPanel({
-  state,
-  admin,
-  onState,
-}: {
-  state: PollState;
-  admin: string;
-  onState: (s: PollState) => void;
-}) {
-  const [deleting, setDeleting] = useState(false);
-  const [error, setError] = useState('');
-  const [saved, setSaved] = useState(false);
-  const [copied, copy] = useCopied();
-  const answered = state.people.some((p) => Object.keys(p.marks).length > 0);
-  const adminLink = `${location.origin}/e/${state.poll.id}#admin=${admin}`;
-  return (
-    <section className="admin" aria-labelledby="admin-title">
-      <details>
-        <summary id="admin-title">Change this poll</summary>
-        <p className="hint">
-          This browser can change the poll because it made it. To change it from another device, open this private
-          link there; anyone with it can change or delete the poll, so keep it to yourself.
-        </p>
-        <p>
-          <button type="button" className="button small" onClick={() => copy('admin', adminLink)}>
-            {copied === 'admin' ? 'private link copied' : 'copy private link'}
-          </button>
-        </p>
-        <PollForm
-          key={state.poll.updated}
-          initial={state.poll}
-          editing
-          answered={answered}
-          submitLabel={saved ? 'saved' : 'save changes'}
-          busyLabel="saving…"
-          onSubmit={async (settings) => {
-            const next = await api.update(state.poll.id, admin, settings);
-            onState(next);
-            store.remember(next.poll, true);
-            setSaved(true);
-            window.setTimeout(() => setSaved(false), 2000);
-          }}
-        />
-        <div className="danger-zone">
-          {deleting ? (
-            <p>
-              Delete “{state.poll.title}” and everyone’s answers?{' '}
-              <button
-                type="button"
-                className="button small danger"
-                onClick={async () => {
-                  try {
-                    await api.destroy(state.poll.id, admin);
-                    store.forget(state.poll.id);
-                    navigate('/');
-                  } catch (err) {
-                    setError(err instanceof Error ? err.message : String(err));
-                  }
-                }}
-              >
-                delete it
-              </button>{' '}
-              <button type="button" className="button small" onClick={() => setDeleting(false)}>
-                keep it
-              </button>
-            </p>
-          ) : (
-            <button type="button" className="text-button danger" onClick={() => setDeleting(true)}>
-              delete this poll
-            </button>
-          )}
-          {error && (
-            <p className="error" role="alert">
-              {error}
-            </p>
-          )}
-        </div>
-      </details>
-    </section>
   );
 }

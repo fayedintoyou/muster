@@ -28,6 +28,7 @@ export const DEFAULT_SETTINGS: PollSettings = {
   size: 0,
   makeup: {},
   discordOnly: false,
+  closed: false,
 };
 
 const LENGTHS = Array.from({ length: 16 }, (_, i) => (i + 1) * 30);
@@ -89,6 +90,8 @@ export function PollForm({
     size,
     makeup: size ? makeup : {},
     discordOnly,
+    // Opened and closed from the organizer tab, not here.
+    closed: initial.closed,
   };
 
   const times = useMemo(() => Array.from({ length: 1440 / slot }, (_, i) => i * slot), [slot]);

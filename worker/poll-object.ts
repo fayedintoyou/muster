@@ -62,6 +62,7 @@ export type Failure = {
   hasPassword?: boolean;
   discord?: boolean;
   discordOnly?: boolean;
+  closed?: boolean;
 };
 export type Outcome<T> = ({ ok: true } & T) | Failure;
 
@@ -145,6 +146,7 @@ export class PollObject extends DurableObject<Env> {
     if (poll.realm === undefined) upgraded = { ...upgraded, realm: REALM_TIME };
     if (poll.size === undefined) upgraded = { ...upgraded, size: 0, makeup: {} };
     if (poll.discordOnly === undefined) upgraded = { ...upgraded, discordOnly: false };
+    if (poll.closed === undefined) upgraded = { ...upgraded, closed: false };
     return upgraded;
   }
 
@@ -307,6 +309,9 @@ export class PollObject extends DurableObject<Env> {
     const people = this.people();
     if (people.some((p) => p.key === key)) return fail(409, `${name.value} has already answered.`, { exists: true });
     if (people.length >= LIMITS.people) return fail(400, `This poll is full (${LIMITS.people} people).`);
+    if (poll.closed) {
+      return fail(403, 'This poll is closed to new answers. Answered already? Use the same character name.', { closed: true });
+    }
     if (poll.discordOnly && !discord) return fail(403, 'This poll asks everyone to sign in with Discord.', { discordOnly: true });
     const linkedTo = discord && people.find((p) => p.discord?.id === discord.id);
     if (linkedTo) return fail(409, `That Discord account is already linked to ${linkedTo.name}.`);
@@ -458,6 +463,22 @@ export class PollObject extends DurableObject<Env> {
       this.kv.put('teams', teams.map((t) => ({ ...t, members: t.members.filter((m) => m !== personId) })));
     }
     return { ok: true, version: this.bump() };
+  }
+
+  /** For someone locked out: takes off their password and Discord link and signs them out everywhere. */
+  async resetLock(admin: string | undefined, personId: string): Promise<Outcome<{ state: PollState }>> {
+    if (!(await this.adminOk(admin))) return fail(403, 'Only whoever made the poll can unlock someone.');
+    const person = this.kv.get<StoredPerson>(`p:${personId}`);
+    if (!person) return fail(404, 'That person isn’t in this poll any more.');
+    delete person.salt;
+    delete person.pass;
+    delete person.tries;
+    delete person.discord;
+    person.tokens = [];
+    person.updated = Date.now();
+    this.kv.put(`p:${person.id}`, person);
+    this.bump();
+    return { ok: true, state: this.state()! };
   }
 
   async update(admin: string | undefined, patch: Partial<PollSettings>): Promise<Outcome<{ state: PollState }>> {
