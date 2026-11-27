@@ -10,6 +10,23 @@ import { auth, error, json } from './http';
 
 const COOKIE = 'muster_discord';
 const STATE_MS = 10 * 60_000;
+/** How long someone signed in with Discord, but not yet in the poll, has to save their answers. */
+const TICKET_MS = 60 * 60_000;
+
+interface Ticket {
+  poll: string;
+  id: string;
+  name: string;
+  exp: number;
+}
+
+/** Who a ticket from signing in with Discord says this is, if it's this poll's and still good. */
+export async function discordTicket(env: Env, value: string, pollId: string): Promise<{ id: string; name: string } | null> {
+  if (!env.DISCORD_CLIENT_SECRET) return null;
+  const ticket = await unsigned<Ticket>(value, env.DISCORD_CLIENT_SECRET);
+  if (!ticket || ticket.poll !== pollId || ticket.exp < Date.now()) return null;
+  return { id: ticket.id, name: ticket.name };
+}
 
 interface State {
   poll: string;
@@ -119,10 +136,11 @@ export async function discordCallback(request: Request, env: Env, url: URL): Pro
     return back(env, url, pollId, linked.ok ? { discord: 'linked', as: user.name } : { discord: 'taken' });
   }
   const signedIn = await poll.discordSignIn(user.id);
-  return back(
-    env,
-    url,
-    pollId,
-    signedIn.ok ? { discord: 'signedin', person: signedIn.personId, token: signedIn.token } : { discord: 'none' },
+  if (signedIn.ok) return back(env, url, pollId, { discord: 'signedin', person: signedIn.personId, token: signedIn.token });
+  // Not in this poll yet, as far as Discord goes: a ticket lets them answer, or claim their name, linked.
+  const ticket = await signed(
+    { poll: pollId, id: user.id, name: user.name, exp: Date.now() + TICKET_MS } satisfies Ticket,
+    env.DISCORD_CLIENT_SECRET,
   );
+  return back(env, url, pollId, { discord: 'none', as: user.name, ticket });
 }

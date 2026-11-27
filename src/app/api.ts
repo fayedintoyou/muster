@@ -88,6 +88,7 @@ export const api = {
       note?: string;
       marks?: Marks;
       claim?: boolean;
+      discordTicket?: string;
     },
   ) {
     return call<{ person: Person; token: string; state: PollState }>(`/api/polls/${id}/people`, {

@@ -1,4 +1,4 @@
-import { type FormEvent, useRef, useState } from 'react';
+import { type FormEvent, useEffect, useRef, useState } from 'react';
 import type { Marks, Person, Poll, PollState } from '../core/types';
 import { LIMITS } from '../core/validate';
 import { ApiError, api } from './api';
@@ -6,20 +6,24 @@ import { store } from './store';
 import { ClassPicker } from './ClassPicker';
 import { RoleIcon } from './icons';
 import { DiscordButton } from './SignIn';
+import { DiscordIcon } from './icons';
 
 // Who's answering, after they've marked their times: a name or in-game handle, their class and a spec or
 // two (which say what roles they bring), and a note if they like. Saving sends the times along with it.
 export function JoinForm({
   poll,
   marks,
+  discord,
   onJoined,
 }: {
   poll: Poll;
   /** The times marked so far on this device. */
   marks: Marks;
+  /** Signed in with Discord already: saving links the answers to it. */
+  discord?: { name: string; ticket: string };
   onJoined: (person: Person, token: string, state: PollState) => void;
 }) {
-  const [name, setName] = useState(() => store.lastName());
+  const [name, setName] = useState(() => store.lastName() || discord?.name || '');
   const [roles, setRoles] = useState<string[]>(() => store.lastRoles().filter((r) => poll.roles.includes(r)));
   const [cls, setCls] = useState(() => (poll.classes.includes(store.lastClass()) ? store.lastClass() : ''));
   const [specs, setSpecs] = useState<string[]>(() => (cls ? store.lastSpecs() : []));
@@ -34,6 +38,11 @@ export function JoinForm({
   const [claim, setClaim] = useState<{ name: string; hasPassword: boolean; discord: boolean } | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+  // Back from Discord, where the page opens at the top: show what happens next.
+  useEffect(() => {
+    if (discord) formRef.current?.scrollIntoView({ block: 'start' });
+  }, [discord]);
 
   const join = async (asExisting: boolean) => {
     setError('');
@@ -48,6 +57,7 @@ export function JoinForm({
         note,
         marks,
         claim: asExisting,
+        discordTicket: discord?.ticket,
       });
       store.setLastName(result.person.name);
       if (roles.length) store.setLastRoles(roles);
@@ -142,8 +152,17 @@ export function JoinForm({
   }
 
   return (
-    <form className="join" onSubmit={submit} noValidate>
+    <form className="join" ref={formRef} onSubmit={submit} noValidate>
       <h3 className="panel-title">Then, who’s this?</h3>
+      {discord && (
+        <p className="discord-joined" role="status">
+          <DiscordIcon />
+          <span>
+            Signed in with Discord as <strong>{discord.name}</strong>. Save your times and they’re linked to it, so
+            Discord signs you in anywhere. Answered here before on another device? Use the same name.
+          </span>
+        </p>
+      )}
       <div className="field">
         <label htmlFor="join-name">Name or in-game handle</label>
         <input
@@ -166,11 +185,15 @@ export function JoinForm({
             Add your name or in-game handle.
           </p>
         )}
-        <p className="hint">
-          Answered already on another device? Use the same name to pick up where you left off, or sign in with
-          Discord if you linked it.
-        </p>
-        <DiscordButton pollId={poll.id} label="sign in with discord" small />
+        {!discord && (
+          <>
+            <p className="hint">
+              Answered already on another device? Use the same name to pick up where you left off, or sign in with
+              Discord.
+            </p>
+            <DiscordButton pollId={poll.id} label="sign in with discord" small />
+          </>
+        )}
       </div>
       {poll.classes.length === 0 && poll.roles.length > 0 && (
         <fieldset className="field">

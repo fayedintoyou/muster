@@ -41,6 +41,10 @@ export function PollPage({ id }: { id: string }) {
   // Back from Discord: signed in, linked, or why not. Read once, before the hash is cleared.
   const [fromDiscord] = useState(discordReturn);
   const [discordNote, setDiscordNote] = useState(() => (fromDiscord ? discordMessage(fromDiscord) : ''));
+  // Signed in with Discord, but not in this poll yet: answering links them.
+  const [discordJoin] = useState(() =>
+    fromDiscord?.outcome === 'none' && fromDiscord.ticket ? { name: fromDiscord.as ?? '', ticket: fromDiscord.ticket } : undefined,
+  );
   const [membership, setMembershipState] = useState<Membership>(() => {
     // The maker's private link, /e/<id>#admin=<token>, makes this browser able to change the poll too.
     const fromLink = /^#admin=([\w-]{16,})$/.exec(location.hash)?.[1];
@@ -658,6 +662,7 @@ export function PollPage({ id }: { id: string }) {
                 <JoinForm
                   poll={poll}
                   marks={unsaved}
+                  discord={discordJoin}
                   onJoined={(person, token, next) => {
                     setMembership({ ...membership, personId: person.id, token });
                     mine.current = { id: person.id, updated: person.updated };

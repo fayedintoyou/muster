@@ -326,9 +326,23 @@ try {
     discordUser = { id: '308123456789012345', username: 'stranger' };
     await p7.click('.notice button:text("ok")');
     await p7.click('.join button:text("sign in with discord")');
-    await p7.waitForSelector('.notice:has-text("No one here is linked")');
+    // Not in the poll yet: the join form says so, with their Discord name filled in, and saving links it.
+    await p7.waitForSelector('.discord-joined');
+    assert.match(await p7.locator('.discord-joined').innerText(), /Signed in with Discord as stranger/);
+    assert.equal(await p7.locator('#join-name').inputValue(), 'stranger', 'the name comes from Discord');
+    assert.equal(await p7.locator('.join button:text("sign in with discord")').count(), 0, 'no second sign-in button');
     await shot(p7, '04e-phone-discord-not-linked');
-    assert.equal(await p7.locator('.me-line').count(), 0);
+    await p7.click('.join .class-chip:text-is("mage")');
+    await p7.click('.join .class-chip:text-is("frost")');
+    await p7.click('button:text("save my times")');
+    await p7.waitForSelector('.me-line');
+    assert.match(await p7.locator('.my-lock').innerText(), /linked to Discord/, 'saved, and linked to Discord');
+    const strangerId = await p7.evaluate((id) => JSON.parse(localStorage.getItem(`muster:poll:${id}`)).personId, pollId);
+    const strangerToken = await p7.evaluate((id) => JSON.parse(localStorage.getItem(`muster:poll:${id}`)).token, pollId);
+    await fetch(`${BASE}/api/polls/${pollId}/people/${strangerId}`, {
+      method: 'DELETE',
+      headers: { authorization: `Bearer ${strangerToken}` },
+    });
     await fresh.close();
 
     // Ten wrong passwords for one person, and the next try waits, even with the right one.
