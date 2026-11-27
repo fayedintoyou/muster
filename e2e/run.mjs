@@ -212,6 +212,8 @@ try {
   await p1.click('.join .class-chip:text-is("retribution")');
   assert.equal(await p1.locator('.join .class-chip:text-is("holy")').isDisabled(), true, 'at most two specs');
   await p1.fill('#join-note', 'Fridays I might be late');
+  await p1.check('.join-level input');
+  await p1.locator('.join').screenshot({ path: `${SHOTS}02c-join-level-phone.png` });
   await p1.click('button:text("save my times")');
   await p1.waitForSelector('.me-line');
   // What shows now is the saved copy from the server, so this checks the times went along with the join.
@@ -488,6 +490,19 @@ try {
   await p2.click('.tabs button:text("best times")');
   await shot(p2, '04b-desk-best');
   await p2.click('.tabs button:text("everyone")');
+  // Level 60 or not: Faye ticked it on saving, Bo didn't, so Bo shows as levelling until they tick it.
+  assert.equal(await p2.locator('.people-list li', { hasText: 'Faye' }).locator('.levelling').count(), 0, 'a 60 isn’t marked');
+  assert.equal(await p2.locator('.people-list li', { hasText: 'Bo' }).locator('.levelling').innerText(), 'levelling', 'not 60 yet shows');
+  await p2.locator('.people-list').screenshot({ path: `${SHOTS}04h-desk-levelling.png` });
+  await p2.click('#tab-mine');
+  assert.equal(await p2.locator('.my-level input').isChecked(), false);
+  await p2.check('.my-level input');
+  await p2.waitForFunction(
+    async (url) => (await (await fetch(url)).json()).people.some((p) => p.name === 'Bo' && p.level60 === true),
+    `${BASE}/api/polls/${pollId}`,
+  );
+  await p2.click('.tabs button:text("everyone")');
+  assert.equal(await p2.locator('.people-list li', { hasText: 'Bo' }).locator('.levelling').count(), 0, 'ticked on their own tab later');
 
   // ---- Back on the phone: everyone, then best times ----
   await p1.reload();

@@ -39,6 +39,8 @@ interface StoredPerson {
   spec?: string;
   /** Missing on people who answered before there were notes. */
   note?: string;
+  /** Missing on people who answered before it was asked. */
+  level60?: boolean;
   marks: Person['marks'];
   salt?: string;
   pass?: string;
@@ -78,6 +80,7 @@ export interface JoinInput {
   specs?: unknown;
   spec?: unknown;
   note?: unknown;
+  level60?: unknown;
   /** Times marked before joining, so a new person's answers arrive in one step. */
   marks?: unknown;
   /** Sign in as an existing person of that name. */
@@ -91,6 +94,7 @@ export interface SaveInput {
   specs?: unknown;
   spec?: unknown;
   note?: unknown;
+  level60?: unknown;
   name?: unknown;
   password?: unknown;
   /** null unlinks their Discord account. */
@@ -115,6 +119,7 @@ function publicPerson(p: StoredPerson): Person {
     specs: p.specs ?? [],
     spec: p.spec ?? '',
     note: p.note ?? '',
+    level60: p.level60 ?? null,
     marks: p.marks,
     hasPassword: Boolean(p.pass),
     discord: Boolean(p.discord),
@@ -326,6 +331,7 @@ export class PollObject extends DurableObject<Env> {
       specs: who.specs,
       spec: cleanSpec(input.spec),
       note: cleanNote(input.note),
+      level60: typeof input.level60 === 'boolean' ? input.level60 : undefined,
       marks: marks?.ok ? marks.value : {},
       salt: secret?.salt,
       pass: secret?.hash,
@@ -372,6 +378,7 @@ export class PollObject extends DurableObject<Env> {
     }
     if (input.spec !== undefined) person.spec = cleanSpec(input.spec);
     if (input.note !== undefined) person.note = cleanNote(input.note);
+    if (typeof input.level60 === 'boolean') person.level60 = input.level60;
     if (input.name !== undefined) {
       const name = validateName(input.name);
       if (!name.ok) return fail(400, name.error);

@@ -31,6 +31,7 @@ export function JoinForm({
   const [classMissing, setClassMissing] = useState<'class' | 'spec' | null>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
   const [note, setNote] = useState('');
+  const [level60, setLevel60] = useState(false);
   const marked = Object.keys(marks).length;
   const [nameMissing, setNameMissing] = useState(false);
   const nameField = useRef<HTMLInputElement>(null);
@@ -56,6 +57,7 @@ export function JoinForm({
         cls: poll.classes.length ? cls : undefined,
         specs: poll.classes.length ? specs : undefined,
         note,
+        level60,
         marks,
         claim: asExisting,
         discordTicket: discord?.ticket,
@@ -245,6 +247,10 @@ export function JoinForm({
           />
         </div>
       )}
+      <label className="check join-level">
+        <input type="checkbox" checked={level60} onChange={(e) => setLevel60(e.target.checked)} />
+        <span>I’m level 60</span>
+      </label>
       <div className="field">
         <label htmlFor="join-note">
           A note for the organizer <span className="muted">(optional)</span>

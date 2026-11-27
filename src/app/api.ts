@@ -86,6 +86,7 @@ export const api = {
       specs?: string[];
       spec?: string;
       note?: string;
+      level60?: boolean;
       marks?: Marks;
       claim?: boolean;
       discordTicket?: string;
@@ -107,6 +108,7 @@ export const api = {
       specs?: string[];
       spec?: string;
       note?: string;
+      level60?: boolean;
       name?: string;
       password?: string;
       discord?: null;

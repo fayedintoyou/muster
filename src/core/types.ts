@@ -55,6 +55,8 @@ export interface Person {
   spec: string;
   /** Anything they'd like the organizer to know, such as "Fridays I'm 30 minutes late". Empty when not given. */
   note: string;
+  /** At max level (60) already, or still levelling. null for anyone who answered before it was asked. */
+  level60: boolean | null;
   marks: Marks;
   hasPassword: boolean;
   /** Linked to a Discord account, so they sign in with Discord. */
