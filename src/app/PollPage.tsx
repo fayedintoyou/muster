@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Mark, Marks, Person, PollState } from '../core/types';
 import { buildGrid } from '../core/grid';
-import { tallySlots } from '../core/best';
-import { formatRange, plural, serverTime, zonePlace } from '../core/format';
+import { sharedSlots, tallySlots } from '../core/best';
+import { formatDuration, formatRange, plural, serverTime, zonePlace } from '../core/format';
 import { MINUTE } from '../core/time';
 import { LIMITS } from '../core/validate';
 import { ApiError, api } from './api';
@@ -101,6 +101,9 @@ export function PollPage({ id }: { id: string }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [hovered, setHovered] = useState<string | null>(null);
   const [highlight, setHighlight] = useState<string | null>(null);
+  // Traced on the everyone grid until let go: someone picked from the list, or your own times. One at a time.
+  const [pinned, setPinned] = useState<string | null>(null);
+  const [withMe, setWithMe] = useState(false);
   const [copied, copy] = useCopied();
   // The guided tour, offered once to someone who hasn't answered yet.
   const [touring, setTouring] = useState(false);
@@ -355,7 +358,12 @@ export function PollPage({ id }: { id: string }) {
   const focusTally = focusKey ? tallies.get(focusKey) : undefined;
   const answeredCount = people.filter((p) => Object.keys(p.marks).length > 0).length;
   const canShare = typeof navigator.share === 'function';
-  const highlightPerson = highlight ? people.find((p) => p.id === highlight) : undefined;
+  const iAnswered = Boolean(me) && !nothingMarked;
+  const traceId = highlight ?? pinned ?? (withMe && iAnswered ? me!.id : null);
+  const tracePerson = traceId ? people.find((p) => p.id === traceId) : undefined;
+  const withYou = iAnswered
+    ? new Map(people.map((p) => [p.id, sharedSlots(grid, myMarks, p.marks) * poll.slot]))
+    : undefined;
 
   const share = () => {
     if (canShare) {
@@ -750,11 +758,41 @@ export function PollPage({ id }: { id: string }) {
               </p>
             ) : (
               <div className="group-main">
-              <p className="hint group-hint">Tap a window to see who’s free.</p>
-              <div className="legend" aria-hidden="true">
-                <span>none free</span>
-                <span className="legend-ramp" style={{ background: GLOW_GRADIENT }} />
-                <span>all {counted.length}</span>
+              {/* Always one line, so pointing along the list doesn't nudge the grid. */}
+              <p className="hint group-hint" data-tracing={tracePerson ? true : undefined}>
+                {tracePerson ? (
+                  tracePerson.id === me?.id ? (
+                    'Outlined: when you’re free.'
+                  ) : (
+                    `Outlined: when ${tracePerson.name} is free${
+                      withYou ? `, ${formatDuration(withYou.get(tracePerson.id) ?? 0)} of it with you` : ''
+                    }.`
+                  )
+                ) : (
+                  <>
+                    <span className="hint-touch">Tap a window to see who’s free.</span>
+                    <span className="hint-mouse">Point at someone to trace their times.</span>
+                  </>
+                )}
+              </p>
+              <div className="legend">
+                <span aria-hidden="true">none free</span>
+                <span className="legend-ramp" aria-hidden="true" style={{ background: GLOW_GRADIENT }} />
+                <span aria-hidden="true">all {counted.length}</span>
+                {iAnswered && (
+                  <button
+                    type="button"
+                    className="toggle"
+                    aria-pressed={withMe}
+                    onClick={() => {
+                      setPinned(null);
+                      setWithMe(!withMe);
+                    }}
+                    title="Trace your times, to see who’s free when you are"
+                  >
+                    my times
+                  </button>
+                )}
               </div>
               <HeatGrid
                 grid={grid}
@@ -763,7 +801,7 @@ export function PollPage({ id }: { id: string }) {
                 selected={selected}
                 onSelect={setSelected}
                 onHover={setHovered}
-                outline={highlightPerson?.marks}
+                outline={tracePerson?.marks}
               />
               </div>
             )}
@@ -826,6 +864,12 @@ export function PollPage({ id }: { id: string }) {
                 })
               }
               onHighlight={setHighlight}
+              pinned={pinned}
+              onPin={(pid) => {
+                setPinned(pid);
+                setWithMe(false);
+              }}
+              withYou={withYou}
               canRemove={(pid) => Boolean(membership.admin) || pid === me?.id}
               onRemove={removePerson}
             />

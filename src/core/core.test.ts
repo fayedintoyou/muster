@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bestWindows, tallySlots } from './best';
+import { bestWindows, sharedSlots, tallySlots } from './best';
 import { buildGrid } from './grid';
 import { nextOccurrence, discordTimestamps } from './occurrence';
 import { slotKeys } from './slots';
@@ -116,6 +116,13 @@ describe('best windows', () => {
     const t = tallySlots(grid, people);
     expect(t.get(tue(20, 30))).toEqual({ yes: ['ana', 'bo'], maybe: [] });
     expect(t.get(thu(22))).toEqual({ yes: ['ana', 'cy'], maybe: ['bo'] });
+  });
+
+  it('counts the slots two people are both free, if needed included', () => {
+    expect(sharedSlots(grid, people[0].marks, people[1].marks)).toBe(5 + 8);
+    expect(sharedSlots(grid, people[1].marks, people[2].marks)).toBe(4);
+    expect(sharedSlots(grid, fill(tueEvening), people[2].marks)).toBe(0);
+    expect(sharedSlots(grid, { 'w9/60': 2 }, { 'w9/60': 2 })).toBe(0);
   });
 
   it('ranks the windows the most people can make, with who is missing', () => {

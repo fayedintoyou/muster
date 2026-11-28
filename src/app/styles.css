@@ -615,8 +615,10 @@ option { background: var(--wall); color: var(--ink); }
   .best-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 2.5rem; max-width: 60rem; }
   .best-item { padding-inline: 0; }
 }
-@media (min-width: 960px) { .group-hint { display: none; } }
 .group-hint { margin: -0.4rem 0 0.8rem; }
+.group-hint[data-tracing] { color: var(--moon); }
+.hint-mouse { display: none; }
+@media (min-width: 960px) { .hint-touch { display: none; } .hint-mouse { display: inline; } }
 
 .me-line { display: flex; align-items: baseline; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
 .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; }
@@ -824,6 +826,7 @@ button.row-head:hover { color: var(--lamp); }
   margin-bottom: 0.9rem;
 }
 .legend-ramp { flex: 0 1 9rem; height: 0.55rem; border-radius: 2px; }
+.legend .toggle { margin-left: auto; }
 
 .slot-detail { margin-top: 0.9rem; }
 .slot-detail-idle { display: none; }
@@ -851,7 +854,9 @@ button.row-head:hover { color: var(--lamp); }
 .person-count { grid-area: name; display: flex; align-items: center; gap: 0.6rem; cursor: pointer; min-width: 0; }
 .person-count input { margin: 0; }
 .person-name { overflow-wrap: anywhere; }
-.person-meta { grid-area: meta; padding-left: 1.7rem; font-family: var(--mono); font-size: 0.6875rem; color: var(--muted); display: flex; gap: 0.6rem; }
+.person-meta { grid-area: meta; padding-left: 1.7rem; font-family: var(--mono); font-size: 0.6875rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: 0.1rem 0.6rem; }
+.with-you { color: var(--moon); }
+.with-you[data-none] { color: var(--accent); }
 .person-actions { grid-area: actions; display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; justify-content: flex-end; }
 .confirm { display: inline-flex; gap: 0.6rem; }
 

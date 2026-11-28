@@ -1,6 +1,6 @@
 import { type Seating, seat } from './seating';
 import type { Grid } from './grid';
-import type { Person } from './types';
+import type { Marks, Person } from './types';
 
 // Who is free when, and the best windows of a given length: the part when2meet leaves to squinting.
 
@@ -22,6 +22,13 @@ export function tallySlots(grid: Grid, people: Person[]): Map<string, Tally> {
     }
   }
   return out;
+}
+
+/** How many of the grid's slots both people marked free, available or if needed. */
+export function sharedSlots(grid: Grid, a: Marks, b: Marks): number {
+  let n = 0;
+  for (const key of Object.keys(a)) if (b[key] && grid.byKey.has(key)) n++;
+  return n;
 }
 
 export interface Candidate {
