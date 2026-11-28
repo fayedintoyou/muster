@@ -839,6 +839,7 @@ try {
   await p2.locator('.raid-line', { hasText: 'Thursday 10' }).screenshot({ path: `${SHOTS}06h-playing-desk.png` });
 
   // ---- Team only: the maker closes Thursday 10, and Faye, not on it, comes off ----
+  await p1.click('.tabs button:text("teams")');
   await t10Maker.locator('button:text("change team")').click();
   await p1.locator('.team-form label.check', { hasText: 'Team only' }).locator('input').check();
   await p1.click('.team-form button:text("save the team")');
