@@ -660,6 +660,8 @@ export class PollObject extends DurableObject<Env> {
     const teams = this.teams();
     if (!teams.some((t) => t.id === teamId)) return fail(404, 'That team doesn’t exist any more.');
     this.kv.put('teams', teams.filter((t) => t.id !== teamId));
+    const { [teamId]: _gone, ...layouts } = this.kv.get<Record<string, Groups>>('layouts') ?? {};
+    this.kv.put('layouts', layouts);
     this.bump();
     return { ok: true, state: this.state()! };
   }
