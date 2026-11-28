@@ -23,7 +23,7 @@ import {
 import { hashPassword, randomId, randomToken, sameHash, sha256 } from './crypto';
 import { type BotLink, DEFAULT_SETTINGS, pingOf, validateBotSettings } from '../src/core/bot';
 import { DAY, type DiscordMessage, EPHEMERAL, type Press, cardTitle, lateAsk, notice, pingFor, raidCard } from '../src/core/card';
-import { discord, botReady } from './discord-api';
+import { DiscordError, discord, botReady } from './discord-api';
 
 // One object per poll. Its storage holds the poll ('poll'), the admin token's hash ('admin'), a version
 // that every change bumps ('version'), and one record per person ('p:<id>'). Each raid night keeps its
@@ -66,6 +66,9 @@ interface StoredPerson {
 }
 
 /** One raid night's post in Discord. */
+/** Discord was disconnected or moved to another channel while the alarm waited on it. */
+class Unlinked extends Error {}
+
 interface CardRecord {
   channel: string;
   message: string;
@@ -73,6 +76,8 @@ interface CardRecord {
   start: number;
   /** No longer on: called off, or moved or unlocked. */
   gone?: 'off' | 'moved';
+  /** Its post was deleted in Discord, so it's left alone. */
+  lost?: boolean;
   reminded?: boolean;
   nudged?: boolean;
 }
@@ -1085,6 +1090,27 @@ export class PollObject extends DurableObject<Env> {
     };
     const seen = new Set<string>();
     const title = (team: Team | null, night: RaidNight) => cardTitle({ poll, team, night });
+    // Each wait on Discord lets other changes in. If Discord was disconnected or moved to another channel
+    // meanwhile, this run stops without writing: the new link has its own alarm.
+    const live = () => this.bot()?.channel === link.channel;
+    const put = (key: string, record: CardRecord) => {
+      if (!live()) throw new Unlinked();
+      this.kv.put(`c:${key}`, record);
+    };
+    // One card's trouble doesn't hold up the others: it's noted, and its edit is tried again later.
+    const failed = new Set<string>();
+    let problem: unknown = null;
+    const attempt = async (key: string, record: CardRecord | undefined, work: () => Promise<void>) => {
+      try {
+        await work();
+      } catch (e) {
+        if (e instanceof Unlinked) throw e;
+        problem = e;
+        // Its post was deleted in Discord: leave that night be rather than trying it forever.
+        if (record && e instanceof DiscordError && e.status === 404) put(key, { ...record, lost: true });
+        else failed.add(key);
+      }
+    };
 
     try {
       for (const { owner, raid, team } of this.raids()) {
@@ -1092,92 +1118,103 @@ export class PollObject extends DurableObject<Env> {
           const key = eventKey(owner, n.night);
           seen.add(key);
           const record = this.kv.get<CardRecord>(`c:${key}`);
-          if (!record) {
-            if (n.off || !due(n.start - link.settings.lead * DAY)) continue;
-            const card = this.card(owner, n.night);
-            if (!card) continue;
-            const ping = pingOf(link.settings, owner);
-            const users =
-              ping === 'members'
-                ? (team ? team.members : this.people().map((p) => p.id)).map((id) => this.discordIdOf(id)).filter((u): u is string => Boolean(u))
-                : [];
-            const mention = ping === 'none' ? { allowed_mentions: { parse: [] } } : pingFor(ping === 'members' ? '' : ping, users);
-            const sent = await discord.post(env, link.channel, { ...card, ...mention });
-            this.kv.put(`c:${key}`, { channel: link.channel, message: sent.id, start: n.start } satisfies CardRecord);
-            continue;
-          }
-          if (n.off !== (record.gone === 'off') || (record.gone && !n.off) || record.start !== n.start || all || dirty.has(key)) {
-            const card = this.card(owner, n.night);
-            if (card) await discord.edit(env, record.channel, record.message, card);
-            const t = title(team, n);
-            if (n.off && record.gone !== 'off') {
-              const msg = notice(`**${t}** is called off.`, this.comingUsers(owner, n.night));
-              if (msg) await discord.post(env, record.channel, msg);
-            } else if (!n.off && record.start !== n.start) {
+          if (record?.lost) continue;
+          await attempt(key, record, async () => {
+            if (!record) {
+              if (n.off || !due(n.start - link.settings.lead * DAY)) return;
+              const card = this.card(owner, n.night);
+              if (!card) return;
+              const ping = pingOf(link.settings, owner);
+              const users =
+                ping === 'members'
+                  ? (team ? team.members : this.people().map((p) => p.id)).map((id) => this.discordIdOf(id)).filter((u): u is string => Boolean(u))
+                  : [];
+              const mention = ping === 'none' ? { allowed_mentions: { parse: [] } } : pingFor(ping === 'members' ? '' : ping, users);
+              const sent = await discord.post(env, link.channel, { ...card, ...mention });
+              put(key, { channel: link.channel, message: sent.id, start: n.start });
+              return;
+            }
+            if (n.off !== (record.gone === 'off') || (record.gone && !n.off) || record.start !== n.start || all || dirty.has(key)) {
+              const card = this.card(owner, n.night);
+              if (card) await discord.edit(env, record.channel, record.message, card);
+              const t = title(team, n);
+              if (n.off && record.gone !== 'off') {
+                const msg = notice(`**${t}** is called off.`, this.comingUsers(owner, n.night));
+                if (msg) await discord.post(env, record.channel, msg);
+              } else if (!n.off && record.start !== n.start) {
+                const s = Math.floor(n.start / 1000);
+                const msg = notice(`**${t}** has moved: it now starts <t:${s}:F> (<t:${s}:R>).`, this.comingUsers(owner, n.night));
+                if (msg) await discord.post(env, record.channel, msg);
+              }
+              record.gone = n.off ? 'off' : undefined;
+              record.start = n.start;
+              if (!record.gone) delete record.gone;
+              put(key, record);
+            }
+            if (n.off || n.start <= now) return;
+            if (link.settings.remind && !record.reminded && due(n.start - link.settings.remind * 60_000)) {
               const s = Math.floor(n.start / 1000);
-              const msg = notice(`**${t}** has moved: it now starts <t:${s}:F> (<t:${s}:R>).`, this.comingUsers(owner, n.night));
+              const msg = notice(`**${title(team, n)}** starts <t:${s}:R>.`, this.comingUsers(owner, n.night));
               if (msg) await discord.post(env, record.channel, msg);
+              record.reminded = true;
+              put(key, record);
             }
-            record.gone = n.off ? 'off' : undefined;
-            record.start = n.start;
-            if (!record.gone) delete record.gone;
-            this.kv.put(`c:${key}`, record);
-          }
-          if (n.off || n.start <= now) continue;
-          if (link.settings.remind && !record.reminded && due(n.start - link.settings.remind * 60_000)) {
-            const s = Math.floor(n.start / 1000);
-            const msg = notice(`**${title(team, n)}** starts <t:${s}:R>.`, this.comingUsers(owner, n.night));
-            if (msg) await discord.post(env, record.channel, msg);
-            this.kv.put(`c:${key}`, { ...record, reminded: true });
-            record.reminded = true;
-          }
-          if (link.settings.nudge && !record.nudged && due(n.start - link.settings.nudge * 3_600_000)) {
-            const state = this.state()!;
-            const r = roster(state.people, state.signups[key], raid, team, poll);
-            const s = Math.floor(n.start / 1000);
-            for (const { id } of r.unanswered) {
-              const user = this.discordIdOf(id);
-              if (!user) continue;
-              await discord
-                .dm(env, user, {
-                  content: `**${title(team, n)}** is <t:${s}:R>. Coming? Tap a button on the raid post, or answer here: ${this.url()}`,
-                  allowed_mentions: { parse: [] },
-                })
-                // Someone who doesn't take messages from server members just isn't nudged.
-                .catch(() => undefined);
+            if (link.settings.nudge && !record.nudged && due(n.start - link.settings.nudge * 3_600_000)) {
+              const state = this.state()!;
+              // Someone away on dated absence isn't asked.
+              const absences = Object.fromEntries(this.people().flatMap((p) => (p.absences ? [[p.id, p.absences]] : [])));
+              const r = roster(state.people, state.signups[key], raid, team, poll, { night: n.night, of: absences });
+              const s = Math.floor(n.start / 1000);
+              for (const { id } of r.unanswered) {
+                const user = this.discordIdOf(id);
+                if (!user) continue;
+                await discord
+                  .dm(env, user, {
+                    content: `**${title(team, n)}** is <t:${s}:R>. Coming? Tap a button on the raid post, or answer here: ${this.url()}`,
+                    allowed_mentions: { parse: [] },
+                  })
+                  // Someone who doesn't take messages from server members just isn't nudged.
+                  .catch(() => undefined);
+              }
+              record.nudged = true;
+              put(key, record);
             }
-            this.kv.put(`c:${key}`, { ...record, nudged: true });
-          }
+          });
         }
       }
 
-      // Cards for nights no longer any raid's: unlocked, a team removed, or moved to another night.
+      // Cards for nights no longer any raid's: unlocked, a team removed, or moved to another night. A night
+      // that has started has simply come and gone, and drops out of the raid's coming nights on its own.
       const from = dateKey(addDays(today(poll.tz), -1));
       for (const [k, record] of this.kv.list<CardRecord>({ prefix: 'c:' })) {
         const key = k.slice(2);
         const night = key.slice(key.indexOf('/') + 1);
-        if (seen.has(key) || record.gone || night < from) continue;
+        if (seen.has(key) || record.gone || record.lost || night < from || record.start <= now) continue;
         const owner = key.slice(0, key.indexOf('/'));
-        const card = this.goneCard(owner, night, record);
-        await discord.edit(env, record.channel, record.message, card);
-        const t = cardTitle({ poll, team: this.teams().find((x) => x.id === owner) ?? null, night: { night, start: record.start, end: record.start, off: true } });
-        const msg = notice(`**${t}** is no longer on: the raid has a new time, or was taken down. See muster for what’s next.`, this.comingUsers(owner, night));
-        if (msg) await discord.post(env, record.channel, msg);
-        this.kv.put(k, { ...record, gone: 'moved' });
+        await attempt(key, record, async () => {
+          await discord.edit(env, record.channel, record.message, this.goneCard(owner, night, record));
+          const t = cardTitle({ poll, team: this.teams().find((x) => x.id === owner) ?? null, night: { night, start: record.start, end: record.start, off: true } });
+          const msg = notice(`**${t}** is no longer on: the raid has a new time, or was taken down. See muster for what’s next.`, this.comingUsers(owner, night));
+          if (msg) await discord.post(env, record.channel, msg);
+          put(key, { ...record, gone: 'moved' });
+        });
       }
 
       const outbox = this.kv.get<{ user: string; text: string }[]>('bot-outbox') ?? [];
       this.kv.delete('bot-outbox');
       for (const m of outbox) await discord.dm(env, m.user, { content: m.text, allowed_mentions: { parse: [] } }).catch(() => undefined);
-      this.kv.delete('bot-error');
     } catch (e) {
-      this.note(e);
-      // Try again in a few minutes; whatever was done is recorded and won't be repeated.
-      next = Math.min(next, now + 5 * 60_000);
+      if (e instanceof Unlinked) return;
+      problem = e;
     }
-    // And look again at least every few hours, as the weeks roll on.
+    if (!live()) return;
+    if (problem) this.note(problem);
+    else this.kv.delete('bot-error');
+    // Try what failed again in a few minutes, and look again at least every few hours as the weeks roll on.
+    if (problem) next = Math.min(next, now + 5 * 60_000);
     next = Math.min(next, now + 6 * 3_600_000);
     if (this.kv.get('bot-dirty') || this.kv.get('bot-outbox')) next = Math.min(next, Date.now() + 1500);
+    if (failed.size) this.kv.put('bot-dirty', [...new Set([...(this.kv.get<string[]>('bot-dirty') ?? []), ...failed])]);
     await this.ctx.storage.setAlarm(next);
   }
 

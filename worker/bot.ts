@@ -25,6 +25,8 @@ async function verified(env: Env, request: Request, body: string): Promise<boole
   const timestamp = request.headers.get('x-signature-timestamp') ?? '';
   const key = hex(env.DISCORD_PUBLIC_KEY ?? '');
   if (!signature || !timestamp || !key) return false;
+  // Discord sends each interaction as it happens; an old one is a replay.
+  if (!(Math.abs(Date.now() / 1000 - Number(timestamp)) <= 5 * 60)) return false;
   try {
     const publicKey = await crypto.subtle.importKey('raw', key, { name: 'Ed25519' }, false, ['verify']);
     return await crypto.subtle.verify({ name: 'Ed25519' }, publicKey, signature, new TextEncoder().encode(timestamp + body));

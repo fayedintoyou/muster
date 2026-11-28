@@ -36,6 +36,7 @@ const PUBLIC_HEX = publicKey.export({ format: 'der', type: 'spki' }).subarray(-3
 const sent = []; // { method, path, body }
 let discordUser = null;
 let nextMessage = 1;
+const deleted = new Set(); // posts someone deleted in Discord: editing them is a 404
 const fake = createServer((req, res) => {
   const url = new URL(req.url, 'http://x');
   let raw = '';
@@ -67,6 +68,7 @@ const fake = createServer((req, res) => {
     }
     if (path === 'users/@me/channels') return reply(200, { id: `dm-${body.recipient_id}` });
     if (req.method === 'POST' && /^channels\/[\w-]+\/messages$/.test(path)) return reply(200, { id: `m${nextMessage++}` });
+    if (req.method === 'PATCH' && deleted.has(path.split('/').pop())) return reply(404, { message: 'Unknown Message', code: 10008 });
     if (req.method === 'PATCH') return reply(200, { id: path.split('/').pop() });
     reply(404, { message: 'Unknown' });
   });
@@ -116,9 +118,9 @@ const api = async (method, path, body, headers = {}) => {
 };
 
 /** An interaction, signed with the stand-in's key as Discord signs them. */
-async function interact(payload, { badSignature = false } = {}) {
+async function interact(payload, { badSignature = false, at = Date.now() } = {}) {
   const body = JSON.stringify(payload);
-  const timestamp = String(Math.floor(Date.now() / 1000));
+  const timestamp = String(Math.floor(at / 1000));
   const signature = sign(null, Buffer.from(timestamp + body), privateKey).toString('hex');
   const r = await fetch(`${BASE}/discord/interactions`, {
     method: 'POST',
@@ -201,6 +203,7 @@ try {
 
   // ---- Discord's checks: a bad signature is turned away, a PING answered ----
   assert.equal((await interact({ type: 1 }, { badSignature: true })).status, 401, 'a bad signature is refused');
+  assert.equal((await interact({ type: 1 }, { at: Date.now() - 3_600_000 })).status, 401, 'an old one, replayed, is refused');
   assert.deepEqual((await interact({ type: 1 })).body, { type: 1 }, 'PING gets PONG');
 
   // ---- Connecting: the organizer gets a code, and /muster connect in the channel uses it ----
@@ -288,7 +291,9 @@ try {
   await waitFor('the card showing Cy on standby', (m) => m.method === 'PATCH' && m.path.endsWith(teamMessage) && /Standby 1/.test(embedText(m)), mark);
 
   // ---- A raid within the hour: a reminder to those coming, and a private nudge to who hasn't answered ----
-  state = await api('POST', `/api/polls/${pollId}/teams`, { name: 'Alt run', members: [ana.person.id, bo.person.id, dee.person.id], size: 10, makeup: {} }, adminHeaders);
+  state = await api('POST', `/api/polls/${pollId}/teams`, { name: 'Alt run', members: [ana.person.id, bo.person.id, cy.person.id, dee.person.id], size: 10, makeup: {} }, adminHeaders);
+  // Cy is away these days, so isn't nudged.
+  await api('PUT', `/api/polls/${pollId}/people/${cy.person.id}/absences`, { absences: [{ from: days[0], to: days[2], note: '' }] }, { authorization: `Bearer ${cy.token}` });
   const alt = state.teams.find((t) => t.name === 'Alt run');
   await api('PUT', `/api/polls/${pollId}/bot`, { pings: { [alt.id]: 'none' } }, adminHeaders);
   mark = sent.length;
@@ -306,6 +311,7 @@ try {
   await new Promise((r) => setTimeout(r, 1500));
   assert.equal(sent.slice(mark).filter((m) => /starts <t:/.test(m.body?.content ?? '')).length, 1, 'one reminder, not one per alarm');
   assert.equal(sent.slice(mark).filter((m) => m.path === `channels/dm-${ANA}/messages`).length, 0, 'no nudge for someone who answered');
+  assert.equal(sent.slice(mark).filter((m) => m.path === `channels/dm-${CY}/messages`).length, 0, 'no nudge for someone away');
   assert.equal(sent.slice(mark).filter((m) => m.path.includes('dm-') && m.path.includes('Dee')).length, 0, 'Dee isn’t on Discord');
 
   // ---- Calling a night off, moving a raid, and unlocking one: cards change and people are told ----
@@ -325,6 +331,36 @@ try {
   await api('DELETE', `/api/polls/${pollId}/teams/${alt.id}/raid`, undefined, adminHeaders);
   await waitFor('the unlocked card', (m) => m.method === 'PATCH' && /Moved: Alt run/.test(embedText(m)), mark);
   await waitFor('the unlocked notice', (m) => m.method === 'POST' && /Alt run.*no longer on/.test(m.body?.content ?? ''), mark);
+
+  // ---- A night under way, or over, isn't "no longer on" when it leaves the coming nights ----
+  state = await api('POST', `/api/polls/${pollId}/teams`, { name: 'Late run', members: [ana.person.id], size: 10, makeup: {} }, adminHeaders);
+  const lateRun = state.teams.find((t) => t.name === 'Late run');
+  const started = local(Date.now());
+  mark = sent.length;
+  await api('PUT', `/api/polls/${pollId}/teams/${lateRun.id}/raid`, { start: `${started.date}/${started.minute - (started.minute % 15)}`, minutes: 60 }, adminHeaders);
+  const latePost = await waitFor('the late run’s post', (m) => m.method === 'POST' && embedText(m).includes('Late run'), mark);
+  await press(ANA, buttonsOf(latePost.body).find((b) => b.label === 'in').custom_id);
+  mark = sent.length;
+  await api('DELETE', `/api/polls/${pollId}/teams/${lateRun.id}/raid`, undefined, adminHeaders);
+  await new Promise((r) => setTimeout(r, 2500));
+  assert.equal(sent.slice(mark).filter((m) => /Late run.*no longer on/.test(m.body?.content ?? '')).length, 0, 'no notice for a night already under way');
+
+  // ---- One post deleted in Discord doesn't hold up the rest, and is left alone after ----
+  deleted.add(teamMessage);
+  mark = sent.length;
+  state = await api('POST', `/api/polls/${pollId}/teams`, { name: 'Friday 10', members: [ana.person.id, cy.person.id], size: 10, makeup: {} }, adminHeaders);
+  const friday = state.teams.find((t) => t.name === 'Friday 10');
+  // A new team edits every card, the deleted one before Friday's is posted.
+  await api('PUT', `/api/polls/${pollId}/teams/${friday.id}/raid`, { start: `${days[2]}/1200`, minutes: 120 }, adminHeaders);
+  await waitFor('the Friday post, past the deleted card', (m) => m.method === 'POST' && embedText(m).includes('Friday 10'), mark);
+  const fridayMessage = `m${nextMessage - 1}`;
+  await waitFor('a try at the deleted card', (m) => m.method === 'PATCH' && m.path.endsWith(`/${teamMessage}`), mark);
+  mark = sent.length;
+  await api('POST', `/api/polls/${pollId}/teams`, { name: 'Spare', members: [], size: 10, makeup: {} }, adminHeaders);
+  await waitFor('the other cards edited', (m) => m.method === 'PATCH' && m.path.endsWith(`/${fridayMessage}`), mark);
+  await new Promise((r) => setTimeout(r, 1000));
+  assert.equal(sent.slice(mark).filter((m) => m.path.endsWith(`/${teamMessage}`)).length, 0, 'the deleted post isn’t tried again');
+  assert.equal((await api('GET', `/api/polls/${pollId}/bot`, undefined, adminHeaders)).problem, null, 'and the bot isn’t stuck on it');
 
   // ---- The organizer tab, connected and not, on a phone and a desktop ----
   for (const [name, viewport] of [
