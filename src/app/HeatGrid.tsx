@@ -42,6 +42,8 @@ export function HeatGrid({
     measure();
     const seen = new ResizeObserver(measure);
     seen.observe(el);
+    // The grid can widen on its own (a late font) while the frame keeps its size.
+    if (el.firstElementChild) seen.observe(el.firstElementChild);
     return () => seen.disconnect();
   }, [grid]);
   return (
@@ -100,14 +102,19 @@ export function HeatGlance({
     const glance = self.current;
     if (!el || !glance) return;
     // Shown once what's left of the big grid fits under the glance, so it covers that rather than
-    // leaving the bottom rows peeking out under the frozen nights. Measured each time: while its tab
-    // is hidden, or on a desktop where it never shows, everything measures zero.
+    // leaving the bottom rows peeking out under the frozen nights. A grid too wide for the screen keeps
+    // its nights inside its own frame, so the glance takes over as soon as that frame's top goes under
+    // the tabs. Measured each time: while its tab is hidden, or on a desktop where it never shows,
+    // everything measures zero.
     let frame = 0;
     const check = () => {
       frame = 0;
       const box = el.getBoundingClientRect();
-      const under = glance.offsetTop + glance.offsetHeight;
-      setShown(box.height > 0 && under > 0 && box.bottom < under);
+      const tabs = glance.offsetTop;
+      const under = tabs + glance.offsetHeight;
+      const wide = el.querySelector('.heat-wrap[data-wide]');
+      const gone = box.bottom < under || (wide !== null && wide.getBoundingClientRect().top < tabs - 1);
+      setShown(box.height > 0 && under > 0 && gone);
     };
     const later = () => {
       if (!frame) frame = requestAnimationFrame(check);
@@ -122,7 +129,9 @@ export function HeatGlance({
       cancelAnimationFrame(frame);
     };
   }, [target]);
-  const rowPx = Math.max(4, Math.min(9, Math.floor(140 / grid.rows.length)));
+  // At most about 140px of rows however long the night: past 35 rows they go thinner and lose their gaps.
+  const rowGap = grid.rows.length <= 35 ? 1 : 0;
+  const rowPx = Math.min(9, (140 - rowGap * (grid.rows.length - 1)) / grid.rows.length);
   return (
     <button
       type="button"
@@ -137,7 +146,7 @@ export function HeatGlance({
       <span className="heat-glance-label">{label}</span>
       <span
         className="heat-glance-grid"
-        style={{ '--cols': grid.columns.length, '--row': `${rowPx}px` } as CSSProperties}
+        style={{ '--cols': grid.columns.length, '--row': `${rowPx.toFixed(2)}px`, '--row-gap': `${rowGap}px` } as CSSProperties}
       >
         {grid.columns.map((_, col) => (
           <span key={`d${col}`} className="heat-glance-day">

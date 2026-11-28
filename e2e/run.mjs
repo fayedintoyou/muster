@@ -771,7 +771,14 @@ try {
   assert.equal(await p4.evaluate(() => scrollY), pageBefore, 'the page stays put');
   assert.equal(await p4.locator('.heat-glance[data-shown]').count(), 1, 'and so does the glance');
   await tap(p4, cdp4, '.heat-glance');
-  await p4.waitForFunction(() => document.querySelector('.group-main').getBoundingClientRect().top > 0);
+  await p4.waitForFunction(
+    () => document.querySelector('.group-main').getBoundingClientRect().top >= document.querySelector('.tabs').getBoundingClientRect().bottom - 1,
+  );
+  assert.equal(
+    await p4.evaluate(() => document.elementFromPoint(40, document.querySelector('.group-hint').getBoundingClientRect().top + 6)?.closest('.group-hint') !== null),
+    true,
+    'back at the grid, the trace line isn’t under the tabs',
+  );
   await p4.waitForSelector('.heat-glance:not([data-shown])', { state: 'attached' });
   await p4.click('.tabs button:text("your times")');
 
@@ -797,6 +804,32 @@ try {
       body: JSON.stringify({ name, cls, specs, marks: wed(mark) }),
     });
   }
+  // ---- Fourteen dates on a phone: too wide, so the grid scrolls in its own frame ----
+  const fortnight = Array.from({ length: 14 }, (_, i) => new Date(Date.UTC(2027, 0, 4 + i)).toISOString().slice(0, 10));
+  const wideRes = await fetch(`${BASE}/api/polls`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ title: 'Two weeks', notes: '', mode: 'dates', days: fortnight, start: 19 * 60, end: 23 * 60, slot: 15, tz: 'America/Chicago', roles: [], length: 120 }),
+  }).then((r) => r.json());
+  await fetch(`${BASE}/api/polls/${wideRes.id}/people`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name: 'Ana', marks: { [`${fortnight[3]}/1200`]: 2, [`${fortnight[10]}/1260`]: 2 } }),
+  });
+  const p9 = await phone.newPage();
+  watch(p9, 'phone-wide');
+  await p9.goto(`${BASE}/e/${wideRes.id}`);
+  await p9.click('.tabs button:text("everyone")');
+  const wideFrame = p9.locator('.heat-wrap');
+  await p9.waitForSelector('.heat-wrap[data-wide]');
+  assert.ok(await wideFrame.evaluate((e) => e.scrollWidth > e.clientWidth), 'the fortnight scrolls sideways in its frame');
+  assert.equal(await p9.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'not the page');
+  // Once the frame's top, and its nights, go under the tabs, the glance takes over.
+  assert.equal(await p9.locator('.heat-glance[data-shown]').count(), 0);
+  await p9.evaluate(() => scrollBy(0, document.querySelector('.heat-wrap').getBoundingClientRect().top - 20));
+  await p9.waitForSelector('.heat-glance[data-shown]');
+  await p9.close();
+
   const p6 = await phone.newPage();
   watch(p6, 'phone-seats');
   await p6.goto(`${BASE}/e/${ten.id}`);

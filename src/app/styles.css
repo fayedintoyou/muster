@@ -580,7 +580,10 @@ option { background: var(--wall); color: var(--ink); }
   background: var(--night);
   border-bottom: 1px solid var(--line);
   overflow-x: auto;
+  /* The frozen nights and the glance sit at its exact height, so no scrollbar may add to it. */
+  scrollbar-width: none;
 }
+.tabs::-webkit-scrollbar { display: none; }
 .tabs button {
   flex: 1 0 auto;
   min-height: 2.5rem;
@@ -612,6 +615,8 @@ option { background: var(--wall); color: var(--ink); }
   .panel-group > .empty { grid-column: 1 / -1; }
   .group-side { position: sticky; top: 1.5rem; }
   .group-side .slot-detail { min-height: 7.5rem; margin-top: 2.6rem; }
+  /* Scrolled down a long list, who's free still shows at the top of the column. */
+  .group-side .slot-detail { position: sticky; top: 0; z-index: 1; background: var(--night); padding-bottom: 0.5rem; }
   .best-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 2.5rem; max-width: 60rem; }
   .best-item { padding-inline: 0; }
 }
@@ -744,7 +749,7 @@ option { background: var(--wall); color: var(--ink); }
   grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
   grid-template-rows: auto;
   grid-auto-rows: var(--row);
-  gap: 1px 2px;
+  gap: var(--row-gap) 2px;
 }
 .heat-glance-grid > span { border-radius: 1px; }
 .heat-glance-grid > span[data-empty] { background: transparent; }
@@ -754,6 +759,8 @@ option { background: var(--wall); color: var(--ink); }
 .heat-glance-grid > .heat-glance-day { height: auto; font-family: var(--mono); font-size: 0.5625rem; color: var(--muted); text-align: center; line-height: 1.4; }
 @media (max-width: 420px) { .heat-glance { padding-left: 1rem; padding-right: 1rem; } }
 
+/* Back up from the glance: land below the tabs, the trace line in sight. */
+.group-main { scroll-margin-top: calc(3.7rem + 1px); }
 /* On a phone a long people list scrolls in its own box, leaving room above it for the tabs and the glance:
    names go by without the page moving. */
 @media (max-width: 959px) {
@@ -764,6 +771,7 @@ option { background: var(--wall); color: var(--ink); }
   .heat-wrap { --heads-top: 0px; }
   .heat-wrap[data-wide] { max-height: calc(100vh - 3rem); }
   .heat-glance { display: none; }
+  .group-main { scroll-margin-top: 0; }
   /* A long people list scrolls beside the grid, so the grid never leaves the screen. */
   .group-side { max-height: calc(100vh - 3rem); overflow-y: auto; padding-right: 0.5rem; }
 }
