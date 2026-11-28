@@ -722,6 +722,19 @@ try {
   const nightsClip = await p4.evaluate(() => navigator.clipboard.readText());
   assert.equal(nightsClip.split('\n').length, 5, `one discord line a night (got ${nightsClip})`);
   await shot(p4, '09b-grouped-best-phone');
+
+  // Scrolling down a grid taller than the phone keeps the nights in view, just under the tabs.
+  await p4.click('.tabs button:text("everyone")');
+  assert.equal(await p4.locator('.heat-wrap').getAttribute('data-wide'), null, 'seven nights fit the phone across');
+  const tabsBottom = (await p4.locator('.tabs').boundingBox()).height;
+  await p4.locator('.heat .row-head').last().evaluate((e) => e.scrollIntoView({ block: 'end' }));
+  const night = await p4.locator('.heat .col-head').first().boundingBox();
+  const firstRow = await p4.locator('.heat .cell').first().boundingBox();
+  assert.ok(firstRow.y + firstRow.height < tabsBottom, 'the first rows have scrolled away');
+  assert.ok(Math.abs(night.y - tabsBottom) < 3, `the nights stay just under the tabs (${night.y} vs ${tabsBottom})`);
+  const onTop = await p4.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest('.col-head') !== null, [night.x + night.width / 2, night.y + night.height / 2]);
+  assert.ok(onTop, 'over the cells scrolled under them');
+  await shot(p4, '09d-frozen-heads-phone', false);
   await p4.click('.tabs button:text("your times")');
 
   // ---- A raid of 10: everyone takes one seat, in a role they play ----

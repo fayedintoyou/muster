@@ -699,6 +699,27 @@ option { background: var(--wall); color: var(--ink); }
   min-width: min-content;
 }
 .paint-wrap, .heat-wrap { overflow-x: auto; padding: 2px 2px 4px; margin: 0 -2px; }
+/* Freeze panes: the nights stick under the tabs while the page scrolls past a tall grid. A grid too wide
+   for the screen scrolls inside its own frame, nights along its top and times down its side. The night
+   shadow covers the gaps cells slide under. */
+.heat-wrap { --heads-top: calc(3.7rem + 1px); }
+.heat-wrap:not([data-wide]) { overflow: visible; }
+.heat-wrap[data-wide] { --heads-top: 0px; max-height: calc(100svh - 5rem); overflow: auto; overscroll-behavior-x: contain; }
+.heat .col-head, .heat .slot-grid-corner { position: sticky; top: var(--heads-top); background: var(--night); }
+.heat .col-head { z-index: 3; box-shadow: 0 -3px 0 var(--night), 3px 0 0 var(--night), 0 3px 0 var(--night); }
+/* The corner leaves its foot clear: the first time's label sits half a line up into it. */
+.heat .slot-grid-corner {
+  z-index: 4;
+  background: linear-gradient(var(--night) calc(100% - 0.55rem), transparent 0);
+  box-shadow: 0 -3px 0 var(--night);
+}
+.heat-wrap[data-wide] .row-head { position: sticky; left: 0; z-index: 3; background: var(--night); box-shadow: 3px 0 0 var(--night); }
+.heat-wrap[data-wide] .slot-grid-corner { left: 0; }
+/* On a desktop the tabs don't follow the page down. */
+@media (min-width: 960px) {
+  .heat-wrap { --heads-top: 0px; }
+  .heat-wrap[data-wide] { max-height: calc(100vh - 3rem); }
+}
 .slot-grid-corner { min-height: 2.6rem; }
 
 .col-head {
