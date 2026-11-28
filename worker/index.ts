@@ -8,6 +8,7 @@ import { describePoll } from './describe';
 import { botApi, interactions } from './bot';
 
 export { PollObject };
+export { GuildObject } from './guild-object';
 
 const MAX_BODY = 64 * 1024;
 
@@ -180,6 +181,27 @@ async function api(request: Request, env: Env, url: URL): Promise<Response> {
         const body = method === 'PUT' ? await readJson(request) : null;
         if (body instanceof Response) return body;
         const result = await poll.lockTeamRaid(admin, teamId, body);
+        return result.ok ? json(result.state) : fromFailure(result);
+      }
+      return error(405, 'Method not allowed.');
+    }
+    return error(404, 'Not found.');
+  }
+
+  if (parts[3] === 'events') {
+    const admin = auth(request).admin;
+    const eventId = parts[4];
+    if (parts.length === 4 && method === 'POST') {
+      const body = await readJson(request);
+      if (body instanceof Response) return body;
+      const result = await poll.saveEvent(admin, undefined, body);
+      return result.ok ? json(result.state, 201) : fromFailure(result);
+    }
+    if (parts.length === 5 && TEAM_ID.test(eventId)) {
+      if (method === 'PUT' || method === 'DELETE') {
+        const body = method === 'PUT' ? await readJson(request) : null;
+        if (body instanceof Response) return body;
+        const result = method === 'PUT' ? await poll.saveEvent(admin, eventId, body) : await poll.deleteEvent(admin, eventId);
         return result.ok ? json(result.state) : fromFailure(result);
       }
       return error(405, 'Method not allowed.');

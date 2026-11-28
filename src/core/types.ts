@@ -2,6 +2,7 @@ import type { Raid } from './raid';
 import type { EventSignups } from './signup';
 import type { Groups } from './groups';
 import type { Team } from './team';
+import type { OneOff } from './event';
 
 export type Mode = 'weekly' | 'dates';
 export type SlotSize = 15 | 30 | 60;
@@ -64,7 +65,19 @@ export interface Person {
   hasPassword: boolean;
   /** Linked to a Discord account, so they sign in with Discord. */
   discord: boolean;
+  /** Their other characters, which share their times. */
+  alts: Alt[];
   updated: number;
+}
+
+/** A second character: its own name, class and specs, on the same person's times. */
+export interface Alt {
+  id: string;
+  name: string;
+  cls: string;
+  specs: string[];
+  /** From the specs, as for a main. */
+  roles: string[];
 }
 
 export interface PollState {
@@ -74,6 +87,8 @@ export interface PollState {
   raid: Raid | null;
   /** Raid teams the organizer picked from the people here. */
   teams: Team[];
+  /** One-off events, such as a pug night or an attunement run: each a single night with its own sign-ups. */
+  events: OneOff[];
   /** Who's coming on each raid night from yesterday on, by event key ('<team or raid>/<night>'). */
   signups: Record<string, EventSignups>;
   /** How the organizer split each of those nights into groups, by event key. */

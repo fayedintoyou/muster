@@ -1,6 +1,7 @@
-import type { Marks, Person, PollSettings, PollState } from '../core/types';
+import type { Alt, Marks, Person, PollSettings, PollState } from '../core/types';
 import type { Raid } from '../core/raid';
 import type { Team } from '../core/team';
+import type { OneOff } from '../core/event';
 import type { Move, SignupStatus } from '../core/signup';
 import type { Absence } from '../core/absence';
 import type { GroupMove } from '../core/groups';
@@ -59,7 +60,7 @@ export const api = {
   unlockRaid(id: string, admin: string) {
     return call<PollState>(`/api/polls/${id}/raid`, { method: 'DELETE', admin });
   },
-  saveTeam(id: string, admin: string, team: Pick<Team, 'name' | 'members' | 'size' | 'makeup'>, teamId?: string) {
+  saveTeam(id: string, admin: string, team: Pick<Team, 'name' | 'members' | 'size' | 'makeup' | 'closed'>, teamId?: string) {
     return call<PollState>(teamId ? `/api/polls/${id}/teams/${teamId}` : `/api/polls/${id}/teams`, {
       method: teamId ? 'PUT' : 'POST',
       admin,
@@ -75,6 +76,16 @@ export const api = {
       admin,
       ...(raid ? { body: JSON.stringify(raid) } : {}),
     });
+  },
+  saveEvent(id: string, admin: string, event: Omit<OneOff, 'id' | 'version'>, eventId?: string) {
+    return call<PollState>(eventId ? `/api/polls/${id}/events/${eventId}` : `/api/polls/${id}/events`, {
+      method: eventId ? 'PUT' : 'POST',
+      admin,
+      body: JSON.stringify(event),
+    });
+  },
+  deleteEvent(id: string, admin: string, eventId: string) {
+    return call<PollState>(`/api/polls/${id}/events/${eventId}`, { method: 'DELETE', admin });
   },
   destroy(id: string, admin: string) {
     return call<{ ok: true }>(`/api/polls/${id}`, { method: 'DELETE', admin });
@@ -115,6 +126,7 @@ export const api = {
       name?: string;
       password?: string;
       discord?: null;
+      alts?: Pick<Alt, 'id' | 'name' | 'cls' | 'specs'>[];
     },
     keepalive = false,
   ) {
@@ -131,7 +143,7 @@ export const api = {
     event: { owner: string; night: string },
     personId: string,
     auth: { token?: string; admin?: string },
-    signup: { status: SignupStatus | null; late?: number },
+    signup: { status: SignupStatus | null; late?: number; as?: string | null; specs?: string[] | null },
   ) {
     return call<PollState>(`/api/polls/${id}/signups/${event.owner}/${event.night}/${personId}`, {
       method: 'PUT',

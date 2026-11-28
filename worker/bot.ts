@@ -43,7 +43,11 @@ interface Interaction {
   channel_id?: string;
   member?: { user?: { id: string } };
   user?: { id: string };
-  data?: { name?: string; custom_id?: string; options?: { name: string; value?: string; options?: { name: string; value?: string }[] }[] };
+  data?: {
+    name?: string;
+    custom_id?: string;
+    options?: { name: string; value?: string; options?: { name: string; value?: string | number }[] }[];
+  };
 }
 
 function origin(env: Env, url: URL): string {
@@ -66,9 +70,11 @@ export async function interactions(request: Request, env: Env, url: URL): Promis
 
   if (i.type === COMMAND && i.data?.name === 'muster') {
     const sub = i.data.options?.[0];
-    if (sub?.name !== 'connect') return say('Try `/muster connect` with the code from your poll’s organizer tab.');
     if (!i.guild_id || !i.channel_id) return say('Use this in the server channel where raid posts should go.');
-    const code = String(sub.options?.find((o) => o.name === 'code')?.value ?? '').trim();
+    const option = (name: string) => sub?.options?.find((o) => o.name === name)?.value;
+    if (sub?.name === 'event') return makeEvent(env, i.guild_id, i.channel_id, option);
+    if (sub?.name !== 'connect') return say('Try `/muster connect` with the code from your poll’s organizer tab.');
+    const code = String(option('code') ?? '').trim();
     const m = code.match(/^([a-z0-9]{8})-([\w-]{12})$/);
     if (!m || !ID_PATTERN.test(m[1])) return say('That doesn’t look like a muster code. Copy it again from the poll’s organizer tab.');
     // Names for the organizer tab. A channel the bot can't see means it can't post there either.
@@ -87,6 +93,7 @@ export async function interactions(request: Request, env: Env, url: URL): Promis
       origin(env, url),
     );
     if (!result.ok) return say(result.error);
+    await env.GUILDS.getByName(i.guild_id).link(i.channel_id, m[1]);
     return json({
       type: REPLY,
       data: {
@@ -101,12 +108,39 @@ export async function interactions(request: Request, env: Env, url: URL): Promis
     if (!parsed) return say('That button is from an older muster. Open the poll instead.');
     const result = await env.POLLS.getByName(parsed.poll).press(user, parsed.owner, parsed.night, parsed.press);
     if ('card' in result) return json({ type: UPDATE, data: result.card });
-    // A reply to a press on someone's own "how late?" row replaces that row.
-    const own = parsed.press.startsWith('late') && parsed.press !== 'late' && !result.reply.flags;
-    return json({ type: own ? UPDATE : REPLY, data: result.reply });
+    // A press on someone's own "how late?", "which spec?" or "which character?" row replaces that row.
+    if ('replace' in result) return json({ type: UPDATE, data: result.replace });
+    return json({ type: REPLY, data: result.reply });
   }
 
   return say('muster doesn’t know that one.');
+}
+
+/** `/muster event`: a one-off event for the poll this server's channel posts for. Its post follows in a moment. */
+async function makeEvent(env: Env, guild: string, channel: string, option: (name: string) => string | number | undefined): Promise<Response> {
+  const pollId = await env.GUILDS.getByName(guild).pollFor(channel);
+  if (!pollId) return say('This server isn’t connected to a poll yet. Use `/muster connect` with the code from the poll’s organizer tab first.');
+  const text = (name: string) => (option(name) === undefined ? undefined : String(option(name)));
+  const number = (name: string) => (option(name) === undefined ? undefined : Number(option(name)));
+  const result = await env.POLLS.getByName(pollId).botEvent(guild, {
+    name: text('name') ?? '',
+    date: text('date') ?? '',
+    time: text('time') ?? '',
+    minutes: number('length'),
+    size: number('size'),
+    team: text('team'),
+    note: text('note'),
+  });
+  if (!result.ok) return say(result.error);
+  const s = Math.floor(result.event.at / 1000);
+  return json({
+    type: REPLY,
+    data: {
+      content: `Made **${result.title.replace(/[*_~`|]/g, '')}** for <t:${s}:F> (<t:${s}:R>). Its sign-up post goes up in the raid channel in a moment; change it on the poll’s events tab.`,
+      flags: EPHEMERAL,
+      allowed_mentions: { parse: [] },
+    },
+  });
 }
 
 /** /api/polls/:id/bot…, for organizers: the code, the settings and roles, posting now, disconnecting. */
@@ -139,7 +173,9 @@ export async function botApi(request: Request, env: Env, id: string, rest: strin
     }
     if (method === 'DELETE') {
       const result = await poll.botDisconnect(admin);
-      return result.ok ? json({ ok: true }) : fromFailure(result);
+      if (!result.ok) return fromFailure(result);
+      if (result.guild) await env.GUILDS.getByName(result.guild).unlink(id);
+      return json({ ok: true });
     }
     return error(405, 'Method not allowed.');
   }

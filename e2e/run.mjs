@@ -818,6 +818,66 @@ try {
   await p2.click('.tabs button:text("your times")');
   await p2.click('.my-away-list li button:text("remove")');
   await p2.waitForSelector('.my-away-list', { state: 'detached' });
+
+  // ---- Alts, and a spec for the night: Bo adds a paladin alt and brings it to Thursday 10 ----
+  await p2.click('.tabs button:text("your times")');
+  await p2.click('.my-alts button:text("add an alt")');
+  await p2.fill('.alt-form input', 'Bolt');
+  await p2.click('.alt-form .class-chip:text-is("paladin")');
+  await p2.click('.alt-form .class-chip:text-is("holy")');
+  await p2.click('.alt-form button:text("add the alt")');
+  await p2.locator('.alt-list li', { hasText: 'Bolt' }).waitFor();
+  await p2.locator('.my-class').screenshot({ path: `${SHOTS}06g-alts-desk.png` });
+  const playing = p2.locator('.raid-line:has-text("Thursday 10") select[aria-label="Playing"]');
+  await playing.selectOption({ label: 'Bolt, holy paladin' });
+  await p2.click('.tabs button:text("teams")');
+  await t10.locator('.event-roster :text("Bolt")').waitFor();
+  assert.match(await t10.locator('.event-roster').innerText(), /healer[\s\S]*Bolt \(Bo’s alt\)/, 'the roster seats the alt as a healer, and says whose');
+  await playing.selectOption({ label: 'Bo, shadow priest this night' });
+  await t10.locator('.event-roster :text("shadow priest")').waitFor();
+  assert.match(await t10.locator('.event-roster').innerText(), /dps[\s\S]*Bo shadow priest/, 'Bo plays shadow this night, as dps');
+  await p2.locator('.raid-line', { hasText: 'Thursday 10' }).screenshot({ path: `${SHOTS}06h-playing-desk.png` });
+
+  // ---- Team only: the maker closes Thursday 10, and Faye, not on it, comes off ----
+  await t10Maker.locator('button:text("change team")').click();
+  await p1.locator('.team-form label.check', { hasText: 'Team only' }).locator('input').check();
+  await p1.click('.team-form button:text("save the team")');
+  await t10Maker.locator('.team-only').waitFor();
+  assert.match(await t10Maker.locator('.event-me').innerText(), /Team only: for the people on Thursday 10/, 'Faye can’t sign up');
+  assert.doesNotMatch(await t10Maker.locator('.event-roster').innerText(), /Faye/, 'and isn’t seated');
+  await shot(p1, '06i-team-only-phone');
+  await t10Maker.locator('button:text("change team")').click();
+  await p1.locator('.team-form label.check', { hasText: 'Team only' }).locator('input').uncheck();
+  await p1.click('.team-form button:text("save the team")');
+  await t10Maker.locator('.event-roster :text("Faye")').waitFor();
+
+  // ---- A one-off event: the maker makes a pug night in two days, 9pm server time ----
+  const inTwoDays = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago' }).format(Date.now() + 2 * 86_400_000);
+  await p1.click('.tabs button:text("events")');
+  await p1.click('.events button:text("new event")');
+  const eventForm = p1.locator('.events .team-form');
+  await eventForm.locator('input[id^="event-name"]').fill('Pug night');
+  await eventForm.locator('input[type="date"]').fill(inTwoDays);
+  await eventForm.getByLabel('Starts').selectOption(String(21 * 60));
+  await eventForm.getByLabel('How long').selectOption('120');
+  await eventForm.locator('.segmented[aria-label="Raid size"] button:text("10 players")').click();
+  await eventForm.locator('input[id^="event-note"]').fill('Bring fire resistance');
+  await p1.click('.events button:text("make the event")');
+  const pug = p1.locator('.team[aria-label="Pug night"]');
+  await pug.waitFor();
+  assert.match(await pug.locator('.raid-when').innerText(), /10pm–12am Eastern time \(9–11pm server\)/, 'New York sees it an hour later than server time');
+  assert.match(await pug.locator('.team-size').innerText(), /10 players.*open to the guild/);
+  await pug.locator('.event-me button:text-is("in")').click();
+  await pug.locator('.event-roster :text("Faye")').waitFor();
+  await shot(p1, '06j-events-phone');
+  // Bo answers from the line at the top, as for a raid.
+  await p2.reload();
+  const pugLine = p2.locator('.raid-line', { hasText: 'Pug night:' });
+  await pugLine.locator('.signup button:text-is("in")').click();
+  await p2.click('.tabs button:text("events (1)")');
+  await p2.locator('.team[aria-label="Pug night"] .event-roster :text("Bo")').waitFor();
+  assert.equal(await p2.locator('.events button:text("new event")').count(), 0, 'only organizers make events');
+  await shot(p2, '06k-events-desk');
   await p2.click('.tabs button:text("everyone")');
 
   await shot(p2, '07-desk-full');

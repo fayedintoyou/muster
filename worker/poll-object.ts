@@ -1,9 +1,12 @@
 import { DurableObject } from 'cloudflare:workers';
-import type { Person, Poll, PollSettings, PollState } from '../src/core/types';
+import type { Alt, Person, Poll, PollSettings, PollState } from '../src/core/types';
 import { slotKeys } from '../src/core/slots';
-import { type Raid, type RaidNight, raidNights, validateRaid } from '../src/core/raid';
-import { type EventSignups, POLL_RAID, eventKey, nextSignup, roster, validateSignup } from '../src/core/signup';
+import { type Raid, type RaidNight, validateRaid } from '../src/core/raid';
+import { type EventSignups, POLL_RAID, type Signup, type SignupChange, checkPlaying, eventKey, nextSignup, playing, roster, validateSignup } from '../src/core/signup';
 import { type Groups, arrange, groupCount, moveInGroups, validateGroupMove } from '../src/core/groups';
+import { EVENT_LIMITS, type OneOff, type RaidOf, currentEvents, nightsOf, parseWhen, raidsOf, validateEvent } from '../src/core/event';
+import { usualMakeup } from '../src/core/seating';
+import { specsFor } from '../src/core/classes';
 import { addDays, dateKey, today } from '../src/core/time';
 import { type Absence, currentAbsences, validateAbsences } from '../src/core/absence';
 import { TEAM_LIMITS, type Team, validateTeam } from '../src/core/team';
@@ -17,12 +20,13 @@ import {
   nameKey,
   validateName,
   validatePassword,
+  validateAlts,
   validateClass,
   validateSettings,
 } from '../src/core/validate';
 import { hashPassword, randomId, randomToken, sameHash, sha256 } from './crypto';
 import { type BotLink, DEFAULT_SETTINGS, pingOf, validateBotSettings } from '../src/core/bot';
-import { DAY, type DiscordMessage, EPHEMERAL, type Press, cardTitle, lateAsk, notice, pingFor, raidCard } from '../src/core/card';
+import { DAY, type DiscordMessage, EPHEMERAL, type Press, altAsk, cardTitle, lateAsk, notice, pingFor, raidCard, specAsk } from '../src/core/card';
 import { DiscordError, discord, botReady } from './discord-api';
 
 // One object per poll. Its storage holds the poll ('poll'), the admin token's hash ('admin'), a version
@@ -57,6 +61,8 @@ interface StoredPerson {
   tries?: { n: number; since: number };
   /** The Discord account linked to this person. With it they sign in with Discord on any device. */
   discord?: { id: string; name: string };
+  /** Missing on people who haven't added any. */
+  alts?: Alt[];
   /** Hashes of this person's sign-in tokens, newest last: one per device. */
   tokens: string[];
   /** Dated absences, for every raid in their span. Never in the poll's state: see `absences()`. */
@@ -74,6 +80,8 @@ interface CardRecord {
   message: string;
   /** The night's start when it was last shown, to notice a raid that moved. */
   start: number;
+  /** Its title when posted, for notices once the raid or event is gone. */
+  title?: string;
   /** No longer on: called off, or moved or unlocked. */
   gone?: 'off' | 'moved';
   /** Its post was deleted in Discord, so it's left alone. */
@@ -82,8 +90,8 @@ interface CardRecord {
   nudged?: boolean;
 }
 
-/** What to answer a button press with. */
-export type PressReply = { card: DiscordMessage } | { reply: DiscordMessage };
+/** What to answer a button press with: the card itself, a private reply, or a change to the presser's own reply. */
+export type PressReply = { card: DiscordMessage } | { reply: DiscordMessage } | { replace: DiscordMessage };
 
 const CODE_MS = 30 * 60_000;
 
@@ -133,6 +141,7 @@ export interface SaveInput {
   password?: unknown;
   /** null unlinks their Discord account. */
   discord?: null;
+  alts?: unknown;
 }
 
 const MAX_TOKENS = 8;
@@ -157,6 +166,7 @@ function publicPerson(p: StoredPerson): Person {
     marks: p.marks,
     hasPassword: Boolean(p.pass),
     discord: Boolean(p.discord),
+    alts: p.alts ?? [],
     updated: p.updated,
   };
 }
@@ -190,7 +200,12 @@ export class PollObject extends DurableObject<Env> {
   }
 
   private teams(): Team[] {
-    return this.kv.get<Team[]>('teams') ?? [];
+    // Teams made before "team only" are open to the guild.
+    return (this.kv.get<Team[]>('teams') ?? []).map((t) => (t.closed === undefined ? { ...t, closed: false } : t));
+  }
+
+  private events(): OneOff[] {
+    return this.kv.get<OneOff[]>('events') ?? [];
   }
 
   /** Sign-ups for nights from yesterday on, by event key; older nights stay stored but aren't sent. */
@@ -216,27 +231,32 @@ export class PollObject extends DurableObject<Env> {
   }
 
   /** Who's seated tonight and how many groups they make, with the night's groups laid over them. */
-  private nightGroups(poll: Poll, owner: string, night: string, raid: Raid) {
-    const team = owner === POLL_RAID ? null : (this.teams().find((t) => t.id === owner) ?? null);
+  private nightGroups(poll: Poll, owner: string, night: string, r: RaidOf) {
     const seated = roster(
       this.people().map(publicPerson),
       this.kv.get<EventSignups>(`s:${eventKey(owner, night)}`),
-      raid,
-      team,
+      r.raid,
+      r.seats,
       poll,
     ).seating.seated.map((s) => s.id);
-    const count = groupCount(team ? team.size : poll.size, seated.length);
+    const count = groupCount(r.seats ? r.seats.size : poll.size, seated.length);
     return { seated, count, ...arrange(this.kv.get<Groups>(`g:${eventKey(owner, night)}`), seated, count) };
   }
 
-  /** The raid an event belongs to, and that the night is one of its coming nights that's on. */
-  private eventRaid(poll: Poll, owner: string, night: string): Raid | Failure {
-    const raid = owner === POLL_RAID ? this.kv.get<Raid>('raid') : this.teams().find((t) => t.id === owner)?.raid;
-    if (!raid) return fail(404, 'That raid isn’t locked in any more.');
-    const n = raidNights(poll, raid, Date.now(), 8).find((x) => x.night === night);
+  /** The raid an event key belongs to, and that the night is one of its coming nights that's on. */
+  private eventRaid(poll: Poll, owner: string, night: string): RaidOf | Failure {
+    const r = this.raids().find((x) => x.owner === owner);
+    if (!r) return fail(404, 'That raid isn’t locked in any more.');
+    const n = nightsOf(poll, r, Date.now(), 8).find((x) => x.night === night);
     if (!n) return fail(404, 'That night isn’t coming up.');
     if (n.off) return fail(409, 'That night has been called off.');
-    return raid;
+    return r;
+  }
+
+  /** Team only: someone not on the team can't sign up. */
+  private shutOut(r: RaidOf, personId: string, name: string): Failure | null {
+    if (!r.seats?.closed || r.seats.members.includes(personId)) return null;
+    return fail(403, `${r.kind === 'event' ? r.name : `${r.name}’s raid`} is team only, and ${name} isn’t on ${r.team?.name ?? 'the team'}.`);
   }
 
   private bump(): number {
@@ -253,6 +273,7 @@ export class PollObject extends DurableObject<Env> {
       people: this.people().map(publicPerson),
       raid: this.kv.get<Raid>('raid') ?? null,
       teams: this.teams(),
+      events: this.events(),
       signups: this.signups(poll.tz),
       groups: this.groups(poll.tz),
       layouts: this.kv.get<Record<string, Groups>>('layouts') ?? {},
@@ -511,6 +532,19 @@ export class PollObject extends DurableObject<Env> {
     if (input.spec !== undefined) person.spec = cleanSpec(input.spec);
     if (input.note !== undefined) person.note = cleanNote(input.note);
     if (typeof input.level60 === 'boolean') person.level60 = input.level60;
+    if (input.alts !== undefined) {
+      const alts = validateAlts(input.alts, poll, person.alts ?? []);
+      if (!alts.ok) return fail(400, alts.error);
+      const taken = new Set(alts.value.map((a) => a.id));
+      for (const a of alts.value) {
+        if (a.id) continue;
+        let id = randomId(4);
+        while (taken.has(id)) id = randomId(4);
+        a.id = id;
+        taken.add(id);
+      }
+      person.alts = alts.value;
+    }
     if (input.name !== undefined) {
       const name = validateName(input.name);
       if (!name.ok) return fail(400, name.error);
@@ -700,6 +734,9 @@ export class PollObject extends DurableObject<Env> {
     this.kv.put('teams', teams.filter((t) => t.id !== teamId));
     const { [teamId]: _gone, ...layouts } = this.kv.get<Record<string, Groups>>('layouts') ?? {};
     this.kv.put('layouts', layouts);
+    // Its events stay on, for the guild.
+    const events = this.events();
+    if (events.some((o) => o.team === teamId)) this.kv.put('events', events.map((o) => (o.team === teamId ? { ...o, team: null } : o)));
     this.bump();
     this.touch();
     return { ok: true, state: this.state()! };
@@ -749,8 +786,13 @@ export class PollObject extends DurableObject<Env> {
     if (!change.ok) return fail(400, change.error);
     const key = `s:${eventKey(owner, night)}`;
     const event = this.kv.get<EventSignups>(key) ?? { people: {}, moves: {} };
-    if (change.value) event.people[personId] = nextSignup(event.people[personId], change.value, Date.now());
-    else delete event.people[personId];
+    if (change.value) {
+      const shut = this.shutOut(raid, personId, person.name);
+      if (shut) return shut;
+      const checked = checkPlaying(publicPerson(person), change.value, event.people[personId]);
+      if (!checked.ok) return fail(400, checked.error);
+      event.people[personId] = nextSignup(event.people[personId], checked.value, Date.now());
+    } else delete event.people[personId];
     this.kv.put(key, event);
     this.bump();
     this.touch([eventKey(owner, night)]);
@@ -884,19 +926,101 @@ export class PollObject extends DurableObject<Env> {
     return { ok: true, state: this.state()! };
   }
 
+  /** Makes a one-off event (no `eventId`) or changes one: its name, time, size, team and note, or calls it off. */
+  async saveEvent(admin: string | undefined, eventId: string | undefined, input: unknown): Promise<Outcome<{ state: PollState; id: string }>> {
+    if (!(await this.adminOk(admin))) return fail(403, 'Only organizers can make events.');
+    const result = this.putEvent(eventId, input);
+    return result.ok ? { ...result, state: this.state()! } : result;
+  }
+
+  private putEvent(eventId: string | undefined, input: unknown): Outcome<{ id: string; event: OneOff }> {
+    if (!this.poll()) return fail(404, 'This poll doesn’t exist.');
+    const teams = this.teams();
+    const checked = validateEvent(input, new Set(teams.map((t) => t.id)));
+    if (!checked.ok) return fail(400, checked.error);
+    const events = currentEvents(this.events());
+    let id = eventId;
+    if (id === undefined) {
+      if (events.length >= EVENT_LIMITS.events) return fail(400, `A poll can have at most ${EVENT_LIMITS.events} events coming up.`);
+      const used = new Set([...teams.map((t) => t.id), ...events.map((o) => o.id), POLL_RAID]);
+      id = randomId(6);
+      while (used.has(id)) id = randomId(6);
+      events.push({ id, ...checked.value, version: 1 });
+    } else {
+      const i = events.findIndex((o) => o.id === eventId);
+      if (i < 0) return fail(404, 'That event doesn’t exist any more.');
+      events[i] = { ...events[i], ...checked.value, version: events[i].version + 1 };
+    }
+    this.kv.put('events', events);
+    this.bump();
+    this.touch();
+    return { ok: true, id, event: events.find((o) => o.id === id)! };
+  }
+
+  /**
+   * `/muster event` in the server's connected channel. Discord's own command permissions said who may; the
+   * event is the guild's unless a team is named. Its post goes up straight away.
+   */
+  async botEvent(
+    guild: string,
+    input: { name: string; date: string; time: string; minutes?: number; size?: number; team?: string; note?: string },
+  ): Promise<Outcome<{ event: OneOff; title: string }>> {
+    const poll = this.poll();
+    const link = this.bot();
+    if (!poll || !link || link.guild !== guild) return fail(404, 'This server isn’t connected to a poll. Connect one with `/muster connect` first.');
+    const zone = poll.realm || poll.tz;
+    const at = parseWhen(input.date, input.time, zone);
+    if (!at.ok) return fail(400, at.error);
+    let team: string | null = null;
+    if (input.team) {
+      const named = this.teams().find((t) => t.name.toLowerCase() === input.team!.trim().toLowerCase());
+      if (!named) return fail(400, `There’s no team called “${input.team.trim()}”. Teams: ${this.teams().map((t) => t.name).join(', ') || 'none yet'}.`);
+      team = named.id;
+    }
+    const size = input.size ?? poll.size;
+    const result = this.putEvent(undefined, {
+      name: input.name,
+      at: at.value,
+      minutes: input.minutes ?? poll.length,
+      size,
+      makeup: size === poll.size ? poll.makeup : usualMakeup(size),
+      team,
+      note: input.note ?? '',
+    });
+    if (!result.ok) return result;
+    return { ok: true, event: result.event, title: result.event.name };
+  }
+
+  async deleteEvent(admin: string | undefined, eventId: string): Promise<Outcome<{ state: PollState }>> {
+    if (!(await this.adminOk(admin))) return fail(403, 'Only organizers can change events.');
+    const events = this.events();
+    if (!events.some((o) => o.id === eventId)) return fail(404, 'That event doesn’t exist any more.');
+    this.kv.put('events', events.filter((o) => o.id !== eventId));
+    this.bump();
+    this.touch();
+    return { ok: true, state: this.state()! };
+  }
+
   // ---- The Discord bot ----
 
   private bot(): BotLink | undefined {
     return this.kv.get<BotLink>('bot');
   }
 
-  /** The raids that can have posts: the poll's own and each team's, by owner. */
-  private raids(): { owner: string; raid: Raid; team: Team | null }[] {
-    const out: { owner: string; raid: Raid; team: Team | null }[] = [];
-    const raid = this.kv.get<Raid>('raid');
-    if (raid) out.push({ owner: POLL_RAID, raid, team: null });
-    for (const t of this.teams()) if (t.raid) out.push({ owner: t.id, raid: t.raid, team: t });
-    return out;
+  /** Every raid with nights to sign up for, and so with posts: the poll's own, each team's and each event. */
+  private raids(): RaidOf[] {
+    const poll = this.poll();
+    if (!poll) return [];
+    const state = { poll, raid: this.kv.get<Raid>('raid') ?? null, teams: this.teams(), events: this.events() };
+    return raidsOf(state, this.people().map((p) => p.id));
+  }
+
+  /** The lines a card shows under its time: who an event is for, and its note. */
+  private detail(r: RaidOf, poll: Poll): string[] | undefined {
+    if (r.kind !== 'event' || !r.event) return r.kind === 'team' && poll.title !== r.name ? [poll.title] : undefined;
+    const lines = [r.team ? `For ${r.team.name}${r.team.closed ? ' only' : ', then the guild'}` : 'Open to the guild'];
+    if (r.event.note) lines.push(r.event.note);
+    return lines;
   }
 
   /**
@@ -981,12 +1105,13 @@ export class PollObject extends DurableObject<Env> {
     return { ok: true, link: next };
   }
 
-  async botDisconnect(admin: string | undefined): Promise<Outcome<object>> {
+  async botDisconnect(admin: string | undefined): Promise<Outcome<{ guild: string | null }>> {
     if (!(await this.adminOk(admin))) return fail(403, 'Only organizers can disconnect Discord.');
+    const guild = this.bot()?.guild ?? null;
     for (const k of ['bot', 'bot-code', 'bot-dirty', 'bot-outbox', 'bot-error', 'bot-origin']) this.kv.delete(k);
     for (const [k] of this.kv.list({ prefix: 'c:' })) this.kv.delete(k);
     this.bump();
-    return { ok: true };
+    return { ok: true, guild };
   }
 
   private url(): string {
@@ -994,20 +1119,20 @@ export class PollObject extends DurableObject<Env> {
     return `${this.kv.get<string>('bot-origin') ?? 'https://muster.fayelore.com'}/e/${poll?.id ?? ''}`;
   }
 
-  /** One night's card as it stands, or null when that night isn't one of a locked-in raid's. */
+  /** One night's card as it stands, or null when that night isn't one of a raid's. */
   private card(owner: string, night: string, gone?: 'off' | 'moved'): DiscordMessage | null {
     const state = this.state();
     if (!state) return null;
-    const team = owner === POLL_RAID ? null : (state.teams.find((t) => t.id === owner) ?? null);
-    const raid = owner === POLL_RAID ? state.raid : team?.raid;
-    if (!raid) return null;
-    const n = raidNights(state.poll, raid, Date.now() - DAY, 8).find((x) => x.night === night);
+    const r = this.raids().find((x) => x.owner === owner);
+    if (!r) return null;
+    const n = nightsOf(state.poll, r, Date.now() - DAY, 8).find((x) => x.night === night);
     if (!n) return null;
     return raidCard({
       poll: state.poll,
       people: state.people,
-      team,
-      raid,
+      team: r.seats,
+      detail: this.detail(r, state.poll),
+      raid: r.raid,
       night: n,
       event: state.signups[eventKey(owner, night)],
       url: this.url(),
@@ -1021,32 +1146,69 @@ export class PollObject extends DurableObject<Env> {
     const say = (content: string, components?: object[]): PressReply => ({
       reply: { flags: EPHEMERAL, content, components, allowed_mentions: { parse: [] } },
     });
+    const open = [{ type: 1, components: [{ type: 2, style: 5, label: 'open muster', url: this.url() }] }];
     if (!poll) return say('This raid’s poll is gone.');
-    const person = this.people().find((p) => p.discord?.id === discordId);
-    if (!person) {
+    const stored = this.people().find((p) => p.discord?.id === discordId);
+    if (!stored) {
       return say(
         'muster doesn’t know your Discord account yet. Open the poll, sign in with Discord and answer once (class, spec and when you’re usually free). After that, these buttons sign you up in one tap.',
-        [{ type: 1, components: [{ type: 2, style: 5, label: 'open muster', url: this.url() }] }],
+        open,
       );
     }
+    const person = publicPerson(stored);
     const raid = this.eventRaid(poll, owner, night);
     if ('ok' in raid) return say(raid.error);
-    if (press === 'late') return { reply: lateAsk(poll.id, owner, night) };
-    const change = press.startsWith('late') ? { status: 'late', late: Number(press.slice(4)) } : { status: press };
-    const checked = validateSignup(change);
-    if (!checked.ok || !checked.value) return say('That button didn’t work. Try again.');
+    const shut = this.shutOut(raid, person.id, person.name);
+    if (shut) return say(shut.error);
     const key = eventKey(owner, night);
+    const before = this.kv.get<EventSignups>(`s:${key}`)?.people[person.id];
+    const now = playing(person, before, poll.roles);
+
+    // Questions first: how late, which spec, which character. Each is answered on the presser's own row.
+    if (press === 'late') return { reply: lateAsk(poll.id, owner, night) };
+    if (press === 'spec') {
+      if (!specsFor(now.cls).length) return say('Pick your class on muster first, then you can change spec here.', open);
+      return { reply: specAsk(poll.id, owner, night, now.cls, before?.specs) };
+    }
+    if (press === 'alt') {
+      if (!person.alts.length) return say('You haven’t added an alt yet. Add one on muster (under your class), then pick it here.', open);
+      return { reply: altAsk(poll.id, owner, night, person.name, person.alts, before?.as) };
+    }
+
+    // Playing as someone else, or another spec, keeps whether they're coming; it signs them in if they hadn't said.
+    const status = before && before.status !== 'out' ? { status: before.status, late: before.late } : { status: 'in' as const };
+    let change: SignupChange;
+    if (press.startsWith('late')) change = { status: 'late', late: Number(press.slice(4)) };
+    else if (press === 'usual') change = { ...status, specs: null };
+    else if (press === 'main') change = { ...status, as: null };
+    else if (press.startsWith('spec')) {
+      const spec = specsFor(now.cls)[Number(press.slice(4))];
+      if (!spec) return say('That spec isn’t one of your class’s. Try again.');
+      change = { ...status, specs: [spec] };
+    } else if (press.startsWith('alt')) change = { ...status, as: press.slice(3) };
+    else change = { status: press as Signup['status'] };
+    const valid = validateSignup(change);
+    if (!valid.ok || !valid.value) return say('That button didn’t work. Try again.');
+    const checked = checkPlaying(person, valid.value, before);
+    if (!checked.ok) return say(checked.error);
+    // No await since the read above.
     const event = this.kv.get<EventSignups>(`s:${key}`) ?? { people: {}, moves: {} };
-    event.people[person.id] = nextSignup(event.people[person.id], checked.value, Date.now());
+    const next = nextSignup(event.people[person.id], checked.value, Date.now());
+    event.people[person.id] = next;
     this.kv.put(`s:${key}`, event);
     this.bump();
-    if (press.startsWith('late')) {
-      // Pressed on their own "how late?" row: the card itself is edited by the alarm.
-      this.touch([key]);
-      return { reply: { content: `Got it: ${checked.value.late} minutes late. See you there.`, components: [] } };
+    if (['in', 'tentative', 'out'].includes(press)) {
+      const card = this.card(owner, night);
+      return card ? { card } : say('That night isn’t coming up.');
     }
-    const card = this.card(owner, night);
-    return card ? { card } : say('That night isn’t coming up.');
+    // Pressed on their own row: the card itself is edited by the alarm.
+    this.touch([key]);
+    const as = playing(person, next, poll.roles);
+    const who = `${as.alt ? as.name : 'your main'}, ${as.specs.join(' / ') || 'usual spec'}${as.cls ? ` ${as.cls}` : ''}`;
+    const text = press.startsWith('late')
+      ? `Got it: ${next.late} minutes late. See you there.`
+      : `Got it: you’re ${next.status === 'tentative' ? 'a maybe' : next.status === 'late' ? `in, ${next.late} minutes late,` : 'in'} on ${who}.`;
+    return { replace: { content: text, components: [] } };
   }
 
   /** Who's coming on a night, linked to Discord: seated, standby and late, for reminders and changes. */
@@ -1089,7 +1251,7 @@ export class PollObject extends DurableObject<Env> {
       return at <= now;
     };
     const seen = new Set<string>();
-    const title = (team: Team | null, night: RaidNight) => cardTitle({ poll, team, night });
+    const title = (r: RaidOf, night: RaidNight) => cardTitle({ poll, team: r.seats, night });
     // Each wait on Discord lets other changes in. If Discord was disconnected or moved to another channel
     // meanwhile, this run stops without writing: the new link has its own alarm.
     const live = () => this.bot()?.channel === link.channel;
@@ -1113,31 +1275,34 @@ export class PollObject extends DurableObject<Env> {
     };
 
     try {
-      for (const { owner, raid, team } of this.raids()) {
-        for (const n of raidNights(poll, raid, now, 4)) {
+      for (const r of this.raids()) {
+        const { owner } = r;
+        for (const n of nightsOf(poll, r, now, 4)) {
           const key = eventKey(owner, n.night);
           seen.add(key);
           const record = this.kv.get<CardRecord>(`c:${key}`);
           if (record?.lost) continue;
           await attempt(key, record, async () => {
             if (!record) {
-              if (n.off || !due(n.start - link.settings.lead * DAY)) return;
+              // A raid's weekly nights go up the guild's lead time ahead; an event's as soon as it's made.
+              if (n.off || (r.kind !== 'event' && !due(n.start - link.settings.lead * DAY))) return;
               const card = this.card(owner, n.night);
               if (!card) return;
-              const ping = pingOf(link.settings, owner);
+              // An event pings as its team's raid does, or the guild's.
+              const ping = pingOf(link.settings, r.kind === 'event' ? (r.team?.id ?? POLL_RAID) : owner);
               const users =
                 ping === 'members'
-                  ? (team ? team.members : this.people().map((p) => p.id)).map((id) => this.discordIdOf(id)).filter((u): u is string => Boolean(u))
+                  ? (r.seats ? r.seats.members : this.people().map((p) => p.id)).map((id) => this.discordIdOf(id)).filter((u): u is string => Boolean(u))
                   : [];
               const mention = ping === 'none' ? { allowed_mentions: { parse: [] } } : pingFor(ping === 'members' ? '' : ping, users);
               const sent = await discord.post(env, link.channel, { ...card, ...mention });
-              put(key, { channel: link.channel, message: sent.id, start: n.start });
+              put(key, { channel: link.channel, message: sent.id, start: n.start, title: title(r, n) });
               return;
             }
             if (n.off !== (record.gone === 'off') || (record.gone && !n.off) || record.start !== n.start || all || dirty.has(key)) {
               const card = this.card(owner, n.night);
               if (card) await discord.edit(env, record.channel, record.message, card);
-              const t = title(team, n);
+              const t = title(r, n);
               if (n.off && record.gone !== 'off') {
                 const msg = notice(`**${t}** is called off.`, this.comingUsers(owner, n.night));
                 if (msg) await discord.post(env, record.channel, msg);
@@ -1154,7 +1319,7 @@ export class PollObject extends DurableObject<Env> {
             if (n.off || n.start <= now) return;
             if (link.settings.remind && !record.reminded && due(n.start - link.settings.remind * 60_000)) {
               const s = Math.floor(n.start / 1000);
-              const msg = notice(`**${title(team, n)}** starts <t:${s}:R>.`, this.comingUsers(owner, n.night));
+              const msg = notice(`**${title(r, n)}** starts <t:${s}:R>.`, this.comingUsers(owner, n.night));
               if (msg) await discord.post(env, record.channel, msg);
               record.reminded = true;
               put(key, record);
@@ -1163,14 +1328,14 @@ export class PollObject extends DurableObject<Env> {
               const state = this.state()!;
               // Someone away on dated absence isn't asked.
               const absences = Object.fromEntries(this.people().flatMap((p) => (p.absences ? [[p.id, p.absences]] : [])));
-              const r = roster(state.people, state.signups[key], raid, team, poll, { night: n.night, of: absences });
+              const list = roster(state.people, state.signups[key], r.raid, r.seats, poll, { night: n.night, of: absences });
               const s = Math.floor(n.start / 1000);
-              for (const { id } of r.unanswered) {
+              for (const { id } of list.unanswered) {
                 const user = this.discordIdOf(id);
                 if (!user) continue;
                 await discord
                   .dm(env, user, {
-                    content: `**${title(team, n)}** is <t:${s}:R>. Coming? Tap a button on the raid post, or answer here: ${this.url()}`,
+                    content: `**${title(r, n)}** is <t:${s}:R>. Coming? Tap a button on the raid post, or answer here: ${this.url()}`,
                     allowed_mentions: { parse: [] },
                   })
                   // Someone who doesn't take messages from server members just isn't nudged.
@@ -1193,7 +1358,9 @@ export class PollObject extends DurableObject<Env> {
         const owner = key.slice(0, key.indexOf('/'));
         await attempt(key, record, async () => {
           await discord.edit(env, record.channel, record.message, this.goneCard(owner, night, record));
-          const t = cardTitle({ poll, team: this.teams().find((x) => x.id === owner) ?? null, night: { night, start: record.start, end: record.start, off: true } });
+          const t =
+            record.title ??
+            cardTitle({ poll, team: this.teams().find((x) => x.id === owner) ?? null, night: { night, start: record.start, end: record.start, off: true } });
           const msg = notice(`**${t}** is no longer on: the raid has a new time, or was taken down. See muster for what’s next.`, this.comingUsers(owner, night));
           if (msg) await discord.post(env, record.channel, msg);
           put(key, { ...record, gone: 'moved' });
@@ -1221,11 +1388,12 @@ export class PollObject extends DurableObject<Env> {
   /** A card for a night that's gone, built from what's left: the raid may not exist any more. */
   private goneCard(owner: string, night: string, record: CardRecord): DiscordMessage {
     const poll = this.poll()!;
-    const team = this.teams().find((t) => t.id === owner) ?? null;
+    const team = this.raids().find((r) => r.owner === owner)?.seats ?? null;
     return raidCard({
       poll,
       people: [],
       team,
+      title: record.title,
       raid: { start: '', minutes: 0 },
       night: { night, start: record.start, end: record.start, off: true },
       event: undefined,
@@ -1239,11 +1407,10 @@ export class PollObject extends DurableObject<Env> {
     const user = this.discordIdOf(personId);
     const poll = this.poll();
     if (!user || !poll || !this.bot() || !move) return;
-    const team = this.teams().find((t) => t.id === owner) ?? null;
-    const raid = owner === POLL_RAID ? this.kv.get<Raid>('raid') : team?.raid;
-    const n = raid && raidNights(poll, raid, Date.now(), 8).find((x) => x.night === night);
-    if (!n) return;
-    const t = cardTitle({ poll, team, night: n });
+    const r = this.raids().find((x) => x.owner === owner);
+    const n = r && nightsOf(poll, r, Date.now(), 8).find((x) => x.night === night);
+    if (!r || !n) return;
+    const t = cardTitle({ poll, team: r.seats, night: n });
     const text = move === 'seat' ? `You’re seated for **${t}**.` : `You’re on standby for **${t}**. You’ll hear if a seat opens up.`;
     this.kv.put('bot-outbox', [...(this.kv.get<{ user: string; text: string }[]>('bot-outbox') ?? []), { user, text }]);
   }

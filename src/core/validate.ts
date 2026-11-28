@@ -1,5 +1,5 @@
-import type { Marks, Mode, PollSettings, SlotSize } from './types';
-import { specsFor } from './classes';
+import type { Alt, Marks, Mode, PollSettings, SlotSize } from './types';
+import { rolesFor, specsFor } from './classes';
 import { WEEK_ORDER, slotKeys } from './slots';
 import { addDays, compareDates, dateKey, isValidTimeZone, parseDate, today, windowLength } from './time';
 
@@ -260,4 +260,28 @@ export function cleanPersonRoles(input: unknown, pollRoles: string[]): string[] 
   const r = cleanRoles(input);
   if (!r.ok) return [];
   return r.value.filter((role) => pollRoles.includes(role));
+}
+
+export const ALT_LIMIT = 4;
+
+/**
+ * Someone's alts: a name, a class and a spec or two each. An alt that kept its id is the same alt (so
+ * sign-ups on it still point at it); a new one comes back with an empty id for the Worker to fill.
+ */
+export function validateAlts(input: unknown, poll: Pick<PollSettings, 'classes' | 'roles'>, before: Alt[]): Result<Alt[]> {
+  if (!Array.isArray(input)) return fail('Missing the alts.');
+  if (input.length > ALT_LIMIT) return fail(`Add at most ${ALT_LIMIT} alts.`);
+  const out: Alt[] = [];
+  for (const raw of input) {
+    if (!raw || typeof raw !== 'object') return fail('Missing an alt’s details.');
+    const r = raw as Record<string, unknown>;
+    const name = validateName(r.name);
+    if (!name.ok) return fail('Give each alt a name.');
+    if (out.some((a) => nameKey(a.name) === nameKey(name.value))) return fail(`${name.value} is there twice.`);
+    const picked = validateClass(r.cls, r.specs, poll.classes);
+    if (!picked.ok) return fail(`${name.value}: ${picked.error.charAt(0).toLowerCase()}${picked.error.slice(1)}`);
+    const id = typeof r.id === 'string' && before.some((a) => a.id === r.id) ? r.id : '';
+    out.push({ id, name: name.value, ...picked.value, roles: rolesFor(picked.value.cls, picked.value.specs).filter((x) => poll.roles.includes(x)) });
+  }
+  return ok(out);
 }

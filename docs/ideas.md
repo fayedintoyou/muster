@@ -92,7 +92,8 @@ These are what has to work before the guild can stop using Raid-Helper.
 "on my alt"), 3 (the card's roster, and a private message to whoever an organizer seats or benches),
 4, 5, 6 (the post is edited and everyone signed up is pinged; calendars follow the `.ics`'s version) and 7
 (Discord's own command permissions decide who can connect a channel; officers organize on the page) are
-built. 8 is PR #34. Still to do from this list: change spec and alts.
+built. 8 is PR #34. Change spec and alts (PR #36): each sign-up can be on an alt or another spec for that
+night, on the page and with "change spec" and "on my alt" on the card; alts are added under your class.
 
 1. **A raid post in Discord.** The bot posts the raid with its date, the times in Discord timestamps and
    server time, the roster so far, and buttons: **in**, **late**, **tentative**, **out**. It's one card,
@@ -196,8 +197,10 @@ web requests, so no bot program has to keep running.
    Done for locked-in raids (PR #21): each coming night of a team's raid, or the poll's own, has in, late
    (by 15 to 90 minutes), maybe and out, one tap from the team's line at the top. Its roster seats the
    team first, then the guild in sign-up order, then standby. The organizer can seat or bench anyone for
-   a night, and people who haven't answered show whether the poll has them usually free. Still to do:
-   one-off events, and "team only".
+   a night, and people who haven't answered show whether the poll has them usually free. One-off events
+   and "team only" (PR #36): an events tab, and `/muster event` in Discord, make a night with its own name,
+   size, note and sign-ups, for the guild or a team; its post goes up at once. A team set to team only
+   turns away anyone not on it.
 4. Dated absences, on the member, so they apply to every team.
 
 The guild raids on this from launch day: raid posts go up as a copied Discord message with a link
@@ -217,7 +220,7 @@ until the bot is ready.
 
 **Once the lockouts are announced:** raid groups and the lockout planner.
 
-**Later:** alts and attendance.
+**Later:** attendance.
 
 ## Guild settings
 

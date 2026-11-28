@@ -37,7 +37,7 @@ const weekly: PollSettings = {
 const NOW = Date.UTC(2026, 10, 25, 5, 37);
 
 function person(id: string, marks: Record<string, 1 | 2>, roles: string[] = []): Person {
-  return { id, name: id, roles, cls: '', specs: [], spec: '', note: '', level60: null, marks, hasPassword: false, discord: false, updated: 0 };
+  return { id, name: id, roles, cls: '', specs: [], spec: '', note: '', level60: null, marks, hasPassword: false, discord: false, alts: [], updated: 0 };
 }
 
 describe('time', () => {
@@ -241,7 +241,7 @@ describe('a locked-in raid', () => {
 describe('teams', () => {
   it('keeps only people in the poll, once each', () => {
     const r = validateTeam({ name: '  Thursday   10 ', members: ['a', 'zz', 'a', 'b'], size: 10, makeup: { tank: 2, healer: 3 } }, new Set(['a', 'b']));
-    expect(r.ok && r.value).toEqual({ name: 'Thursday 10', members: ['a', 'b'], size: 10, makeup: { tank: 2, healer: 3 } });
+    expect(r.ok && r.value).toEqual({ name: 'Thursday 10', members: ['a', 'b'], size: 10, makeup: { tank: 2, healer: 3 }, closed: false });
     expect(validateTeam({ name: ' ', members: [] }, new Set()).ok).toBe(false);
   });
 
@@ -251,9 +251,9 @@ describe('teams', () => {
     expect(raidsClash({ start: 'w4/1200', minutes: 180 }, { start: 'w2/1200', minutes: 180 })).toBe(false);
     const raid = (start: string) => ({ start, minutes: 180, skips: [], version: 1 });
     const teams = [
-      { id: 'one', name: 'One', members: ['faye', 'bo'], size: 0, makeup: {}, raid: raid('w4/1200') },
-      { id: 'two', name: 'Two', members: ['bo'], size: 0, makeup: {}, raid: raid('w4/1260') },
-      { id: 'tre', name: 'Three', members: ['faye'], size: 0, makeup: {}, raid: raid('w2/1200') },
+      { id: 'one', name: 'One', members: ['faye', 'bo'], size: 0, makeup: {}, closed: false, raid: raid('w4/1200') },
+      { id: 'two', name: 'Two', members: ['bo'], size: 0, makeup: {}, closed: false, raid: raid('w4/1260') },
+      { id: 'tre', name: 'Three', members: ['faye'], size: 0, makeup: {}, closed: false, raid: raid('w2/1200') },
     ];
     const clashes = teamClashes(teams);
     expect(clashes.get('one')?.map((c) => [c.person, c.team.id])).toEqual([['bo', 'two']]);
@@ -340,7 +340,7 @@ describe('validation', () => {
 
 describe('sign-ups', () => {
   const raid = { start: 'w4/1200', minutes: 60 };
-  const poll = { size: 0, makeup: {}, slot: 30 as const };
+  const poll = { size: 0, makeup: {}, slot: 30 as const, roles: ['tank', 'healer', 'dps'], mode: 'weekly' as const };
   const at = (n: number) => ({ status: 'in' as const, at: n });
 
   it('seats the team first, then the guild first come, then standby', () => {

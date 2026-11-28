@@ -1,9 +1,11 @@
-import type { Person, PollSettings } from './types';
+import type { Alt, Person, PollSettings } from './types';
 import type { Raid } from './raid';
 import { parseSlotKey } from './slots';
 import { type Seating, seat } from './seating';
-import { type Result } from './validate';
+import { LIMITS, type Result } from './validate';
 import { type Absence, awayOn } from './absence';
+import { rolesFor, specsFor } from './classes';
+import { parseDate, weekdayOf } from './time';
 
 // Sign-ups: each night of a locked-in raid is an event people answer in, late, tentative or out. Being
 // free (the poll), signing up (here) and turning up are different things, so these sit beside the poll's
@@ -21,6 +23,18 @@ export interface Signup {
   late?: number;
   /** When they first signed up, or last changed from out to coming: first come, first seated. */
   at: number;
+  /** On one of their alts this night, by the alt's id. */
+  as?: string;
+  /** Another spec this night than the character's usual ones. */
+  specs?: string[];
+}
+
+/** What someone says for a night. For `as` and `specs`, undefined keeps what they said before; null goes back to usual. */
+export interface SignupChange {
+  status: SignupStatus;
+  late?: number;
+  as?: string | null;
+  specs?: string[] | null;
 }
 
 /** An organizer's call on one person for one night. */
@@ -41,34 +55,107 @@ export function eventKey(owner: string, night: string): string {
 
 export const LATE_STEPS = [15, 30, 45, 60, 90];
 
-export function validateSignup(input: unknown): Result<Pick<Signup, 'status' | 'late'> | null> {
+/**
+ * The shape of a sign-up. Whether the alt and specs are this person's own is checked against them with
+ * `checkPlaying`.
+ */
+export function validateSignup(input: unknown): Result<SignupChange | null> {
   if (!input || typeof input !== 'object') return { ok: false, error: 'Missing the sign-up.' };
   const raw = input as Record<string, unknown>;
   if (raw.status === null) return { ok: true, value: null };
   if (!STATUSES.includes(raw.status as SignupStatus)) return { ok: false, error: 'Sign up as in, late, tentative or out.' };
   const status = raw.status as SignupStatus;
-  if (status !== 'late') return { ok: true, value: { status } };
-  const late = Number(raw.late);
-  if (!LATE_STEPS.includes(late)) return { ok: false, error: 'Pick how late you’ll be.' };
-  return { ok: true, value: { status, late } };
+  const value: SignupChange = { status };
+  if (status === 'late') {
+    const late = Number(raw.late);
+    if (!LATE_STEPS.includes(late)) return { ok: false, error: 'Pick how late you’ll be.' };
+    value.late = late;
+  }
+  if (raw.as !== undefined) {
+    if (raw.as !== null && (typeof raw.as !== 'string' || !/^[a-z0-9]{4,8}$/.test(raw.as))) return { ok: false, error: 'Unknown alt.' };
+    value.as = raw.as;
+  }
+  if (raw.specs !== undefined) {
+    if (raw.specs !== null && (!Array.isArray(raw.specs) || !raw.specs.every((x) => typeof x === 'string'))) {
+      return { ok: false, error: 'Unknown spec.' };
+    }
+    value.specs = raw.specs === null || (raw.specs as string[]).length === 0 ? null : (raw.specs as string[]);
+  }
+  return { ok: true, value };
 }
 
 /** Coming or not, from what they said: a later change keeps their place unless they'd dropped out. */
-export function nextSignup(before: Signup | undefined, change: Pick<Signup, 'status' | 'late'>, now: number): Signup {
+export function nextSignup(before: Signup | undefined, change: SignupChange, now: number): Signup {
   const coming = (s: SignupStatus) => s === 'in' || s === 'late';
   const keepPlace = before && coming(before.status) && coming(change.status);
-  return { ...change, at: keepPlace ? before.at : now };
+  const out: Signup = { status: change.status, at: keepPlace ? before.at : now };
+  if (change.late !== undefined) out.late = change.late;
+  const as = change.as === undefined ? before?.as : change.as;
+  // Another character's specs don't carry over to this one.
+  const specs = change.specs === undefined && change.as === undefined ? before?.specs : change.specs;
+  if (as) out.as = as;
+  if (specs) out.specs = specs;
+  return out;
+}
+
+/** Checks that the alt is theirs and the specs are its class's. */
+export function checkPlaying(person: Pick<Person, 'cls' | 'alts'>, change: SignupChange, before: Signup | undefined): Result<SignupChange> {
+  const as = change.as === undefined ? before?.as : change.as;
+  const alt = as ? person.alts.find((a) => a.id === as) : undefined;
+  if (as && !alt) return { ok: false, error: 'That alt isn’t one of yours any more.' };
+  if (!change.specs) return { ok: true, value: change };
+  const cls = alt?.cls ?? person.cls;
+  const known = specsFor(cls);
+  const specs = [...new Set(change.specs.map((x) => x.toLocaleLowerCase('en-US')))];
+  if (!known.length) return { ok: false, error: 'Specs are for a class with specs.' };
+  if (specs.length > LIMITS.specs || specs.some((x) => !known.includes(x))) return { ok: false, error: `Pick a ${cls} spec.` };
+  return { ok: true, value: { ...change, specs: known.filter((x) => specs.includes(x)) } };
+}
+
+/** Who someone plays on a night: their main or an alt, in its usual specs or the night's. */
+export interface Playing {
+  name: string;
+  cls: string;
+  specs: string[];
+  roles: string[];
+  /** Set when it's an alt. */
+  alt?: Alt;
+  /** Specs other than the character's usual ones. */
+  changed: boolean;
+}
+
+export function playing(person: Person, signup: Pick<Signup, 'as' | 'specs'> | undefined, pollRoles: string[]): Playing {
+  const alt = signup?.as ? person.alts.find((a) => a.id === signup.as) : undefined;
+  const base = alt ?? person;
+  const specs = signup?.specs?.length ? signup.specs : base.specs;
+  const changed = Boolean(signup?.specs?.length) && specs.join() !== base.specs.join();
+  return {
+    name: base.name,
+    cls: base.cls,
+    specs,
+    roles: changed ? rolesFor(base.cls, specs).filter((r) => pollRoles.includes(r)) : base.roles,
+    alt,
+    changed,
+  };
 }
 
 export type Usually = 'free' | 'if needed' | 'busy';
 
 /** What someone's poll answers say about this raid's time: free for all of it, only at a push, or not. */
-export function usuallyFree(person: Pick<Person, 'marks'>, raid: Pick<Raid, 'start' | 'minutes'>, slot: number): Usually {
+export function usuallyFree(
+  person: Pick<Person, 'marks'>,
+  raid: Pick<Raid, 'start' | 'minutes'>,
+  slot: number,
+  mode: PollSettings['mode'] = 'dates',
+): Usually {
   const start = parseSlotKey(raid.start);
   if (!start) return 'busy';
+  // A one-off event on a date, in a poll of weekdays: what they marked for that weekday.
+  const date = mode === 'weekly' ? parseDate(start.day) : null;
+  const day = date ? `w${weekdayOf(date)}` : start.day;
   let push = false;
   for (let m = start.minute; m < start.minute + raid.minutes; m += slot) {
-    const mark = person.marks[`${start.day}/${m}`];
+    const mark = person.marks[`${day}/${m}`];
     if (!mark) return 'busy';
     if (mark === 1) push = true;
   }
@@ -87,10 +174,19 @@ export interface Roster {
   away: { id: string; note: string }[];
 }
 
+/** Who's seated first and how many a raid holds: a team, or a one-off event's. */
+export interface Seats {
+  members: string[];
+  size: number;
+  makeup: Record<string, number>;
+  /** Team only: no one else is seated or counted. */
+  closed?: boolean;
+}
+
 /**
  * Who's seated for one night. Seated first: anyone an organizer seated, then the team's members who are
  * coming (in the usual order, so the harder to place go first), then everyone else coming, first come
- * first served. Benched people wait on standby.
+ * first served. Benched people wait on standby. Each is placed as who they're playing that night.
  *
  * Someone with a dated absence over the night counts as away, not unanswered, unless they've answered for
  * it anyway: an answer for the night wins, so coming back early is one tap.
@@ -99,20 +195,27 @@ export function roster(
   people: Person[],
   event: EventSignups | undefined,
   raid: Pick<Raid, 'start' | 'minutes'>,
-  team: { members: string[]; size: number; makeup: Record<string, number> } | null,
-  poll: Pick<PollSettings, 'size' | 'makeup' | 'slot'>,
+  team: Seats | null,
+  poll: Pick<PollSettings, 'size' | 'makeup' | 'slot' | 'roles' | 'mode'>,
   absences?: { night: string; of: Record<string, readonly Absence[]> },
 ): Roster {
   const signups = event?.people ?? {};
   const moves = event?.moves ?? {};
-  const byId = new Map(people.map((p) => [p.id, p]));
+  const members = new Set(team?.members ?? []);
+  const byId = new Map(
+    people
+      .filter((p) => !team?.closed || members.has(p.id))
+      .map((p) => {
+        const now = playing(p, signups[p.id], poll.roles);
+        return [p.id, { ...p, cls: now.cls, specs: now.specs, roles: now.roles }];
+      }),
+  );
   const answered = (status: SignupStatus[]) =>
     Object.entries(signups)
       .filter(([id, s]) => byId.has(id) && status.includes(s.status))
       .sort((a, b) => a[1].at - b[1].at)
       .map(([id]) => id);
   const coming = answered(['in', 'late']);
-  const members = new Set(team?.members ?? []);
   const benched = coming.filter((id) => moves[id] === 'bench');
   const order = [
     ...coming.filter((id) => moves[id] === 'seat'),
@@ -145,7 +248,9 @@ export function roster(
     standby: [...seating.extra, ...benched],
     tentative: answered(['tentative']),
     out: answered(['out']),
-    unanswered: pool.filter((id) => !away.has(id)).map((id) => ({ id, usually: usuallyFree(byId.get(id)!, raid, poll.slot) })),
+    unanswered: pool
+      .filter((id) => byId.has(id) && !away.has(id))
+      .map((id) => ({ id, usually: usuallyFree(byId.get(id)!, raid, poll.slot, poll.mode) })),
     away: [...away].map(([id, a]) => ({ id, note: a.note })),
   };
 }

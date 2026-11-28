@@ -16,10 +16,17 @@
 
   // One Durable Object per poll, holding the poll and everyone's answers in its own SQLite storage.
   // SQLite-backed objects are on the Workers Free plan, and need nothing created beforehand.
+  // And one per Discord server, saying which poll each of its channels posts for.
   "durable_objects": {
-    "bindings": [{ "name": "POLLS", "class_name": "PollObject" }]
+    "bindings": [
+      { "name": "POLLS", "class_name": "PollObject" },
+      { "name": "GUILDS", "class_name": "GuildObject" }
+    ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["PollObject"] }],
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["PollObject"] },
+    { "tag": "v2", "new_sqlite_classes": ["GuildObject"] }
+  ],
 
   // Sign in with Discord, and the bot. The client secret, the bot's token and the app's public key are Worker
   // secrets (wrangler secret put DISCORD_CLIENT_SECRET, DISCORD_BOT_TOKEN, DISCORD_PUBLIC_KEY);
@@ -39,7 +46,10 @@
       "routes": [],
       "vars": { "DISCORD_CLIENT_ID": "1575719104306880626", "DISCORD_ORIGIN": "https://discord.com" },
       "durable_objects": {
-        "bindings": [{ "name": "POLLS", "class_name": "PollObject" }]
+        "bindings": [
+          { "name": "POLLS", "class_name": "PollObject" },
+          { "name": "GUILDS", "class_name": "GuildObject" }
+        ]
       }
     }
   }

@@ -1,11 +1,10 @@
 import { useContext, useState } from 'react';
 import type { Person, Poll, PollState } from '../core/types';
-import type { Raid } from '../core/raid';
-import { raidNights } from '../core/raid';
+import { type RaidOf, nightsOf } from '../core/event';
 import { formatDate, plural, weekdayName } from '../core/format';
 import { localTime } from '../core/time';
-import { LATE_STEPS, type Move, type SignupStatus, type Usually, eventKey, roster } from '../core/signup';
-import { ROLES } from '../core/classes';
+import { LATE_STEPS, type Move, type Signup, type SignupStatus, type Usually, eventKey, playing, roster } from '../core/signup';
+import { ROLES, classLabel, specsFor } from '../core/classes';
 import { api } from './api';
 import { classStyle } from './ClassPicker';
 import { AbsencesContext } from './Absences';
@@ -23,7 +22,10 @@ function nightLabel(instant: number, zone: string): string {
   return `${weekdayName(t.weekday, 'short')} ${formatDate(t, 'short')}`;
 }
 
-/** in · late · maybe · out for one night, and how late once late. */
+/** "main:" for their main as usual, "main:holy" for a spec this night, "<alt id>:" for an alt, and so on. */
+const playValue = (s: Pick<Signup, 'as' | 'specs'> | undefined) => `${s?.as ?? 'main'}:${s?.specs?.join('+') ?? ''}`;
+
+/** in · late · maybe · out for one night, how late once late, and who they're playing once coming. */
 export function SignupButtons({
   pollId,
   owner,
@@ -37,17 +39,17 @@ export function SignupButtons({
   owner: string;
   night: string;
   me: Person;
-  current: { status: SignupStatus; late?: number } | undefined;
+  current: Signup | undefined;
   auth: Auth;
   onState: (state: PollState) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const send = async (status: SignupStatus | null, late?: number) => {
+  const send = async (status: SignupStatus | null, late?: number, play?: { as: string | null; specs: string[] | null }) => {
     setBusy(true);
     setError('');
     try {
-      onState(await api.signUp(pollId, { owner, night }, me.id, auth, { status, late }));
+      onState(await api.signUp(pollId, { owner, night }, me.id, auth, { status, late, ...play }));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -85,6 +87,33 @@ export function SignupButtons({
           ))}
         </select>
       )}
+      {current && current.status !== 'out' && (me.alts.length > 0 || specsFor(me.cls).length > 0) && (
+        <select
+          aria-label="Playing"
+          className="signup-playing"
+          value={playValue(current)}
+          disabled={busy}
+          onChange={(e) => {
+            const [as, specs] = e.target.value.split(':');
+            void send(current.status, current.late, { as: as === 'main' ? null : as, specs: specs ? specs.split('+') : null });
+          }}
+        >
+          {[{ id: 'main', name: me.name, cls: me.cls, specs: me.specs }, ...me.alts].map((c) => (
+            <optgroup key={c.id} label={c.id === 'main' ? `${c.name} (main)` : c.name}>
+              <option value={`${c.id}:`}>
+                {c.name}, {classLabel(c.cls, c.specs)}
+              </option>
+              {specsFor(c.cls)
+                .filter((spec) => c.specs.join() !== spec)
+                .map((spec) => (
+                  <option key={spec} value={`${c.id}:${spec}`}>
+                    {c.name}, {spec} {c.cls} this night
+                  </option>
+                ))}
+            </optgroup>
+          ))}
+        </select>
+      )}
       {error && (
         <span className="error" role="alert">
           {' '}
@@ -99,9 +128,7 @@ export function SignupButtons({
 export function EventPanel({
   poll,
   state,
-  owner,
-  raid,
-  team,
+  of,
   zone,
   me,
   auth,
@@ -109,15 +136,15 @@ export function EventPanel({
 }: {
   poll: Poll;
   state: PollState;
-  owner: string;
-  raid: Raid;
-  team: { members: string[]; size: number; makeup: Record<string, number> } | null;
+  /** The poll's raid, a team's or an event. */
+  of: RaidOf;
   zone: string;
   me?: Person;
   auth: Auth;
   onState: (state: PollState) => void;
 }) {
-  const nights = raidNights(poll, raid, Date.now(), poll.mode === 'weekly' ? 4 : 1).filter((n) => !n.off);
+  const { owner, raid, seats: team } = of;
+  const nights = nightsOf(poll, of, Date.now(), of.mode === 'weekly' ? 4 : 1).filter((n) => !n.off);
   const [picked, setPicked] = useState<string | null>(null);
   const [error, setError] = useState('');
   const absences = useContext(AbsencesContext);
@@ -145,9 +172,12 @@ export function EventPanel({
   const name = (id: string) => {
     const p = byId.get(id);
     const s = signup(id);
+    const now = p && playing(p, s, poll.roles);
     return (
-      <span className="roster-name" style={classStyle(p?.cls ?? '')}>
-        {p?.name ?? 'someone'}
+      <span className="roster-name" style={classStyle(now?.cls ?? '')}>
+        {now?.alt ? now.name : (p?.name ?? 'someone')}
+        {now?.alt && <span className="muted"> ({p!.name}’s alt)</span>}
+        {now?.changed && <span className="muted"> {classLabel(now.cls, now.specs)}</span>}
         {id === me?.id && <span className="muted"> (you)</span>}
         {p?.level60 === false && <span className="muted"> levelling</span>}
         {s?.status === 'late' && <span className="muted"> {s.late} min late</span>}
@@ -195,7 +225,9 @@ export function EventPanel({
           ))}
         </div>
       )}
-      {me && (
+      {me && team?.closed && !members.has(me.id) ? (
+        <p className="event-me muted">Team only: for the people on {of.team?.name ?? 'the team'}.</p>
+      ) : me && (
         <p className="event-me">
           <span className="muted">You, {nightLabel(night.start, zone)}:</span>{' '}
           {meAway && <span className="event-away">away{meAway.note && ` (${meAway.note})`}, unless you sign up</span>}

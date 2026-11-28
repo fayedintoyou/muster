@@ -11,6 +11,8 @@ import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import assert from 'node:assert/strict';
+
+const POLL_RAID = 'raid';
 import { chromium } from 'playwright-core';
 
 const CHROME =
@@ -241,7 +243,7 @@ try {
   assert.equal(teamPost.body.content, `<@&${ROLE}>`, 'the new post pings the team’s role');
   assert.deepEqual(teamPost.body.allowed_mentions, { roles: [ROLE] }, 'and only that role');
   const teamButtons = buttonsOf(teamPost.body);
-  assert.deepEqual(teamButtons.map((b) => b.label), ['in', 'late', 'maybe', 'out', 'muster']);
+  assert.deepEqual(teamButtons.map((b) => b.label), ['in', 'late', 'maybe', 'out', 'muster', 'change spec', 'on my alt']);
   assert.match(embedText(teamPost), /<t:\d+:F>/, 'times as Discord timestamps');
   assert.match(embedText(teamPost), /8–11pm server time/, 'and in server time');
   const teamMessage = `m${nextMessage - 1}`;
@@ -331,6 +333,91 @@ try {
   await api('DELETE', `/api/polls/${pollId}/teams/${alt.id}/raid`, undefined, adminHeaders);
   await waitFor('the unlocked card', (m) => m.method === 'PATCH' && /Moved: Alt run/.test(embedText(m)), mark);
   await waitFor('the unlocked notice', (m) => m.method === 'POST' && /Alt run.*no longer on/.test(m.body?.content ?? ''), mark);
+
+  // ---- Change spec for a night: Bo, a holy priest, plays shadow ----
+  const pollButton = (label) => buttonsOf(pollPost.body).find((b) => b.label === label).custom_id;
+  const specs = await press(BO, pollButton('change spec'));
+  assert.equal(specs.body.data.flags, 64, 'which spec is asked privately');
+  assert.deepEqual(buttonsOf(specs.body.data).map((b) => b.label), ['discipline', 'holy', 'shadow', 'my usual'], 'the priest’s specs');
+  mark = sent.length;
+  const shadow = await press(BO, buttonsOf(specs.body.data)[2].custom_id);
+  assert.equal(shadow.body.type, 7, 'the private row is replaced');
+  assert.match(shadow.body.data.content, /in on your main, shadow priest/);
+  const shadowCard = await waitFor('the card with Bo as shadow', (m) => m.method === 'PATCH' && embedText(m).includes('Barrow Deeps') && embedText(m).includes('shadow'), mark);
+  assert.match(embedText(shadowCard), /DPS 1\/5[^}]*Bo · shadow priest/, 'Bo is seated as dps for the night');
+  state = await api('GET', `/api/polls/${pollId}`);
+  assert.deepEqual(state.signups[`raid/${tomorrow}`].people[bo.person.id].specs, ['shadow'], 'the page sees the spec');
+
+  // ---- On an alt: Ana has none, adds one on the page, then picks it ----
+  const noAlt = await press(ANA, pollButton('on my alt'));
+  assert.match(noAlt.body.data.content, /haven’t added an alt/, 'no alts yet: told where to add one');
+  const saved = await api('PUT', `/api/polls/${pollId}/people/${ana.person.id}`, { alts: [{ name: 'Anabel', cls: 'priest', specs: ['holy'] }] }, { authorization: `Bearer ${ana.token}` });
+  const anabel = saved.person.alts[0];
+  assert.match(anabel.id, /^[a-z0-9]{4}$/, 'the alt gets an id');
+  assert.deepEqual(anabel.roles, ['healer'], 'and roles from its spec');
+  const which = await press(ANA, pollButton('on my alt'));
+  assert.deepEqual(buttonsOf(which.body.data).map((b) => b.label), ['Anabel · priest', 'Ana (main)']);
+  mark = sent.length;
+  const onAlt = await press(ANA, buttonsOf(which.body.data)[0].custom_id);
+  assert.match(onAlt.body.data.content, /in on Anabel, holy priest/, 'picking an alt signs Ana in on it');
+  const altCard = await waitFor('the card with Anabel', (m) => m.method === 'PATCH' && embedText(m).includes('Barrow Deeps') && embedText(m).includes('Anabel'), mark);
+  assert.match(embedText(altCard), /Healers 1\/3[^}]*Anabel \(Ana\) · priest/, 'Anabel heals, and the card says whose she is');
+  await assert.rejects(
+    api('PUT', `/api/polls/${pollId}/signups/${POLL_RAID}/${tomorrow}/${cy.person.id}`, { status: 'in', as: 'zzzz' }, { authorization: `Bearer ${cy.token}` }),
+    /400/,
+    'an alt that isn’t yours is refused',
+  );
+
+  // ---- Team only: a closed run turns away anyone not on it ----
+  state = await api('POST', `/api/polls/${pollId}/teams`, { name: 'Closed run', members: [ana.person.id], size: 10, makeup: {}, closed: true }, adminHeaders);
+  const closed = state.teams.find((t) => t.name === 'Closed run');
+  assert.equal(closed.closed, true);
+  mark = sent.length;
+  await api('PUT', `/api/polls/${pollId}/teams/${closed.id}/raid`, { start: `${days[2]}/1200`, minutes: 120 }, adminHeaders);
+  const closedPost = await waitFor('the closed run’s post', (m) => m.method === 'POST' && embedText(m).includes('Closed run'), mark);
+  assert.deepEqual(closedPost.body.allowed_mentions, { users: [ANA] }, 'it pings only its own people');
+  const boClosed = await press(BO, buttonsOf(closedPost.body).find((b) => b.label === 'in').custom_id);
+  assert.equal(boClosed.body.data.flags, 64);
+  assert.match(boClosed.body.data.content, /team only, and Bo isn’t on Closed run/, 'Bo is turned away');
+  await assert.rejects(
+    api('PUT', `/api/polls/${pollId}/signups/${closed.id}/${days[2]}/${bo.person.id}`, { status: 'in' }, { authorization: `Bearer ${bo.token}` }),
+    /403/,
+    'on the page too',
+  );
+  assert.equal((await press(ANA, buttonsOf(closedPost.body).find((b) => b.label === 'in').custom_id)).body.type, 7, 'its own people sign up');
+
+  // ---- /muster event: a one-off pug night, made in the channel, posted at once ----
+  const makeEvent = (options) =>
+    interact({
+      type: 2,
+      guild_id: GUILD,
+      channel_id: CHANNEL,
+      member: { user: { id: ANA } },
+      data: { name: 'muster', options: [{ type: 1, name: 'event', options: Object.entries(options).map(([name, value]) => ({ name, value })) }] },
+    });
+  assert.match((await makeEvent({ name: 'Pug night', date: 'someday', time: '9pm' })).body.data.content, /can’t read “someday” as a date/);
+  assert.match((await makeEvent({ name: 'Pug night', date: days[2], time: 'nine' })).body.data.content, /can’t read “nine” as a time/);
+  assert.match((await makeEvent({ name: 'Pug night', date: days[2], time: '9pm', team: 'Nope' })).body.data.content, /no team called “Nope”/);
+  mark = sent.length;
+  const made = await makeEvent({ name: 'Pug night', date: days[2], time: '9pm', length: 120, size: 10, note: 'Bring fire resistance' });
+  assert.equal(made.body.data.flags, 64, 'the maker hears privately');
+  assert.match(made.body.data.content, /Made \*\*Pug night\*\* for <t:\d+:F>/);
+  const eventPost = await waitFor('the event’s post', (m) => m.method === 'POST' && embedText(m).includes('Pug night'), mark);
+  assert.match(embedText(eventPost), /9–11pm server time/, 'at 9pm server time, for two hours');
+  assert.match(embedText(eventPost), /Open to the guild\\nBring fire resistance/, 'who it’s for, and the note');
+  assert.deepEqual(eventPost.body.allowed_mentions.users.sort(), [ANA, BO, CY], 'a guild event pings as the guild’s raid does');
+  state = await api('GET', `/api/polls/${pollId}`);
+  const pug = state.events.find((o) => o.name === 'Pug night');
+  assert.equal(pug.size, 10);
+  assert.equal(pug.note, 'Bring fire resistance');
+  const cyIn = await press(CY, buttonsOf(eventPost.body).find((b) => b.label === 'in').custom_id);
+  assert.match(embedText(cyIn.body.data), /Cy · mage/, 'a tap signs up for the event');
+  // The organizer calls it off on the page: the post changes and Cy hears.
+  mark = sent.length;
+  await api('PUT', `/api/polls/${pollId}/events/${pug.id}`, { ...pug, off: true }, adminHeaders);
+  await waitFor('the called-off event', (m) => m.method === 'PATCH' && /Called off: Pug night/.test(embedText(m)), mark);
+  const pugOff = await waitFor('the event’s called-off notice', (m) => m.method === 'POST' && /Pug night.*is called off/.test(m.body?.content ?? ''), mark);
+  assert.deepEqual(pugOff.body.allowed_mentions, { users: [CY] });
 
   // ---- A night under way, or over, isn't "no longer on" when it leaves the coming nights ----
   state = await api('POST', `/api/polls/${pollId}/teams`, { name: 'Late run', members: [ana.person.id], size: 10, makeup: {} }, adminHeaders);
