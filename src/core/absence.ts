@@ -61,6 +61,8 @@ export function validateAbsences(input: unknown, today: YMD): Result<Absence[]> 
     }
     if (compareDates(from, last) > 0) return { ok: false, error: 'An absence can start at most a year ahead.' };
     if (compareDates(to, today) < 0) continue;
+    // The same dates twice is one absence, kept with its first note.
+    if (out.some((a) => a.from === dateKey(from) && a.to === dateKey(to))) continue;
     out.push({ from: dateKey(from), to: dateKey(to), note: cleanLine(n, ABSENCE_LIMITS.note) });
   }
   if (out.length > ABSENCE_LIMITS.absences) return { ok: false, error: `At most ${ABSENCE_LIMITS.absences} absences.` };

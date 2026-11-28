@@ -110,7 +110,7 @@ export function MyAbsences({
       {absences.length > 0 && (
         <ul className="my-away-list">
           {absences.map((a, i) => (
-            <li key={`${a.from}/${a.to}`}>
+            <li key={i}>
               <span>
                 {absenceRange(a)}
                 {a.note && <span className="muted"> · {a.note}</span>}
@@ -180,7 +180,14 @@ export function MyAbsences({
             <button type="submit" className="button small primary" disabled={busy || !draft.from || !draft.to}>
               {busy ? 'saving…' : 'save'}
             </button>
-            <button type="button" className="text-button" onClick={() => setEditing(null)}>
+            <button
+              type="button"
+              className="text-button"
+              onClick={() => {
+                setEditing(null);
+                setError('');
+              }}
+            >
               cancel
             </button>
           </div>

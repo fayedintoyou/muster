@@ -645,7 +645,22 @@ try {
   await p2.click('.my-away-form button:text("save")');
   assert.match(await p2.locator('.my-away .error').innerText(), /at most 60 days/);
   await p2.click('.my-away-form button:text("cancel")');
+  assert.equal(await p2.locator('.my-away .error').count(), 0, 'cancelling the form clears its error');
   await p2.locator('.my-away').screenshot({ path: `${SHOTS}06g-away-desk.png` });
+  // The Worker holds the same rules: 61 days is refused, and the same dates twice are kept once.
+  {
+    const bo = await p2.evaluate((id) => JSON.parse(localStorage.getItem(`muster:poll:${id}`)), pollId);
+    const put = (absences) =>
+      fetch(`${BASE}/api/polls/${pollId}/people/${bo.personId}/absences`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${bo.token}` },
+        body: JSON.stringify({ absences }),
+      });
+    assert.equal((await put([{ from: nyDate(30), to: nyDate(90), note: '' }])).status, 400, 'the Worker refuses 61 days');
+    const twice = [{ from: nyDate(0), to: nyDate(27), note: 'holidays' }, { from: nyDate(0), to: nyDate(27), note: 'again' }];
+    const saved = await put(twice).then((r) => r.json());
+    assert.deepEqual(saved.absences.map((a) => a.note), ['holidays'], 'the same dates twice are one absence');
+  }
 
   // The organizer sees him away on a night he hasn't answered, with the note, and not as unanswered.
   await p1.reload();
