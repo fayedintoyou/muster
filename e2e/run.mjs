@@ -722,6 +722,64 @@ try {
   const nightsClip = await p4.evaluate(() => navigator.clipboard.readText());
   assert.equal(nightsClip.split('\n').length, 5, `one discord line a night (got ${nightsClip})`);
   await shot(p4, '09b-grouped-best-phone');
+
+  // A guild-sized list: eighteen more, each free a different two hours on a few nights.
+  for (let i = 0; i < 18; i++) {
+    const nights = [1, 2, 3, 4, 5, 6, 0].filter((_, d) => (i + d) % 3 !== 0);
+    const from = 1140 + (i % 6) * 30;
+    const keys = {};
+    for (const d of nights) for (let m = from; m < from + 120; m += 15) keys[`w${d}/${m}`] = 2;
+    await fetch(`${BASE}/api/polls/${dense.id}/people`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: `Raider${i + 1}`, marks: keys }),
+    });
+  }
+  await p4.reload();
+  await p4.waitForSelector('.tabs');
+
+  // Scrolling down a grid taller than the phone keeps the nights in view, just under the tabs.
+  await p4.click('.tabs button:text("everyone")');
+  assert.equal(await p4.locator('.heat-wrap').getAttribute('data-wide'), null, 'seven nights fit the phone across');
+  const tabsBottom = (await p4.locator('.tabs').boundingBox()).height;
+  await p4.locator('.heat .row-head').last().evaluate((e) => e.scrollIntoView({ block: 'end' }));
+  const night = await p4.locator('.heat .col-head').first().boundingBox();
+  const firstRow = await p4.locator('.heat .cell').first().boundingBox();
+  assert.ok(firstRow.y + firstRow.height < tabsBottom, 'the first rows have scrolled away');
+  assert.ok(Math.abs(night.y - tabsBottom) < 3, `the nights stay just under the tabs (${night.y} vs ${tabsBottom})`);
+  const onTop = await p4.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest('.col-head') !== null, [night.x + night.width / 2, night.y + night.height / 2]);
+  assert.ok(onTop, 'over the cells scrolled under them');
+  await shot(p4, '09d-frozen-heads-phone', false);
+
+  // Down in the people list the big grid has gone, so a small copy holds under the tabs and traces whoever's shown.
+  assert.equal(await p4.locator('.heat-glance[data-shown]').count(), 0, 'no glance while the grid is in view');
+  await p4.locator('.people-list li').last().evaluate((e) => e.scrollIntoView({ block: 'end' }));
+  await p4.waitForSelector('.heat-glance[data-shown]');
+  // Raider10 is free 7:30–9:30pm on four of the nights: 32 quarter hours.
+  await tap(p4, cdp4, '.people-list li:has-text("Raider10") .toggle:text("show")');
+  assert.equal(await p4.locator('.heat-glance[data-shown]').count(), 1, 'still shown after tapping show far down the list');
+  assert.equal(await p4.locator('.heat-glance-grid > [data-outline="2"]').count(), 32, 'the glance traces Raider10’s times');
+  assert.match(await p4.locator('.heat-glance-label').innerText(), /^Outlined: when Raider10 is free/);
+  await p4.waitForFunction(() => getComputedStyle(document.querySelector('.heat-glance')).opacity === '1');
+  await shot(p4, '09e-glance-phone', false);
+  // The names scroll on their own: going down the list leaves the page, and the glance, where they are.
+  const list = p4.locator('.people-list');
+  assert.ok(await list.evaluate((e) => e.scrollHeight > e.clientHeight), 'twenty names overflow their box');
+  const pageBefore = await p4.evaluate(() => scrollY);
+  await list.evaluate((e) => (e.scrollTop = 0));
+  await list.evaluate((e) => (e.scrollTop = e.scrollHeight));
+  assert.equal(await p4.evaluate(() => scrollY), pageBefore, 'the page stays put');
+  assert.equal(await p4.locator('.heat-glance[data-shown]').count(), 1, 'and so does the glance');
+  await tap(p4, cdp4, '.heat-glance');
+  await p4.waitForFunction(
+    () => document.querySelector('.group-main').getBoundingClientRect().top >= document.querySelector('.tabs').getBoundingClientRect().bottom - 1,
+  );
+  assert.equal(
+    await p4.evaluate(() => document.elementFromPoint(40, document.querySelector('.group-hint').getBoundingClientRect().top + 6)?.closest('.group-hint') !== null),
+    true,
+    'back at the grid, the trace line isn’t under the tabs',
+  );
+  await p4.waitForSelector('.heat-glance:not([data-shown])', { state: 'attached' });
   await p4.click('.tabs button:text("your times")');
 
   // ---- A raid of 10: everyone takes one seat, in a role they play ----
@@ -746,6 +804,32 @@ try {
       body: JSON.stringify({ name, cls, specs, marks: wed(mark) }),
     });
   }
+  // ---- Fourteen dates on a phone: too wide, so the grid scrolls in its own frame ----
+  const fortnight = Array.from({ length: 14 }, (_, i) => new Date(Date.UTC(2027, 0, 4 + i)).toISOString().slice(0, 10));
+  const wideRes = await fetch(`${BASE}/api/polls`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ title: 'Two weeks', notes: '', mode: 'dates', days: fortnight, start: 19 * 60, end: 23 * 60, slot: 15, tz: 'America/Chicago', roles: [], length: 120 }),
+  }).then((r) => r.json());
+  await fetch(`${BASE}/api/polls/${wideRes.id}/people`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name: 'Ana', marks: { [`${fortnight[3]}/1200`]: 2, [`${fortnight[10]}/1260`]: 2 } }),
+  });
+  const p9 = await phone.newPage();
+  watch(p9, 'phone-wide');
+  await p9.goto(`${BASE}/e/${wideRes.id}`);
+  await p9.click('.tabs button:text("everyone")');
+  const wideFrame = p9.locator('.heat-wrap');
+  await p9.waitForSelector('.heat-wrap[data-wide]');
+  assert.ok(await wideFrame.evaluate((e) => e.scrollWidth > e.clientWidth), 'the fortnight scrolls sideways in its frame');
+  assert.equal(await p9.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'not the page');
+  // Once the frame's top, and its nights, go under the tabs, the glance takes over.
+  assert.equal(await p9.locator('.heat-glance[data-shown]').count(), 0);
+  await p9.evaluate(() => scrollBy(0, document.querySelector('.heat-wrap').getBoundingClientRect().top - 20));
+  await p9.waitForSelector('.heat-glance[data-shown]');
+  await p9.close();
+
   const p6 = await phone.newPage();
   watch(p6, 'phone-seats');
   await p6.goto(`${BASE}/e/${ten.id}`);
