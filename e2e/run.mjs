@@ -762,6 +762,14 @@ try {
   assert.match(await p4.locator('.heat-glance-label').innerText(), /^Outlined: when Raider10 is free/);
   await p4.waitForFunction(() => getComputedStyle(document.querySelector('.heat-glance')).opacity === '1');
   await shot(p4, '09e-glance-phone', false);
+  // The names scroll on their own: going down the list leaves the page, and the glance, where they are.
+  const list = p4.locator('.people-list');
+  assert.ok(await list.evaluate((e) => e.scrollHeight > e.clientHeight), 'twenty names overflow their box');
+  const pageBefore = await p4.evaluate(() => scrollY);
+  await list.evaluate((e) => (e.scrollTop = 0));
+  await list.evaluate((e) => (e.scrollTop = e.scrollHeight));
+  assert.equal(await p4.evaluate(() => scrollY), pageBefore, 'the page stays put');
+  assert.equal(await p4.locator('.heat-glance[data-shown]').count(), 1, 'and so does the glance');
   await tap(p4, cdp4, '.heat-glance');
   await p4.waitForFunction(() => document.querySelector('.group-main').getBoundingClientRect().top > 0);
   await p4.waitForSelector('.heat-glance:not([data-shown])', { state: 'attached' });

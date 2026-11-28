@@ -754,6 +754,11 @@ option { background: var(--wall); color: var(--ink); }
 .heat-glance-grid > .heat-glance-day { height: auto; font-family: var(--mono); font-size: 0.5625rem; color: var(--muted); text-align: center; line-height: 1.4; }
 @media (max-width: 420px) { .heat-glance { padding-left: 1rem; padding-right: 1rem; } }
 
+/* On a phone a long people list scrolls in its own box, leaving room above it for the tabs and the glance:
+   names go by without the page moving. */
+@media (max-width: 959px) {
+  .people-list { max-height: calc(100svh - 19rem); min-height: 12rem; overflow-y: auto; border-bottom: 1px solid var(--line); }
+}
 /* On a desktop the tabs don't follow the page down. */
 @media (min-width: 960px) {
   .heat-wrap { --heads-top: 0px; }

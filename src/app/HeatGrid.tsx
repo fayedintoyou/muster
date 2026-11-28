@@ -98,17 +98,30 @@ export function HeatGlance({
   useLayoutEffect(() => {
     const el = target.current;
     const glance = self.current;
-    if (!el || !glance || getComputedStyle(glance).display === 'none') return;
+    if (!el || !glance) return;
     // Shown once what's left of the big grid fits under the glance, so it covers that rather than
-    // leaving the bottom rows peeking out under the frozen nights.
-    const under = Math.round(glance.offsetTop + glance.offsetHeight);
-    const seen = new IntersectionObserver(
-      ([entry]) => setShown(!entry.isIntersecting && entry.boundingClientRect.top < under),
-      { rootMargin: `-${under}px 0px 0px 0px` },
-    );
+    // leaving the bottom rows peeking out under the frozen nights. Measured each time: while its tab
+    // is hidden, or on a desktop where it never shows, everything measures zero.
+    let frame = 0;
+    const check = () => {
+      frame = 0;
+      const box = el.getBoundingClientRect();
+      const under = glance.offsetTop + glance.offsetHeight;
+      setShown(box.height > 0 && under > 0 && box.bottom < under);
+    };
+    const later = () => {
+      if (!frame) frame = requestAnimationFrame(check);
+    };
+    check();
+    addEventListener('scroll', later, { passive: true });
+    const seen = new ResizeObserver(later);
     seen.observe(el);
-    return () => seen.disconnect();
-  }, [target, grid]);
+    return () => {
+      removeEventListener('scroll', later);
+      seen.disconnect();
+      cancelAnimationFrame(frame);
+    };
+  }, [target]);
   const rowPx = Math.max(4, Math.min(9, Math.floor(140 / grid.rows.length)));
   return (
     <button
