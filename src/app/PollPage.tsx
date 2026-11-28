@@ -765,7 +765,7 @@ export function PollPage({ id }: { id: string }) {
                     'Outlined: when you’re free.'
                   ) : (
                     `Outlined: when ${tracePerson.name} is free${
-                      withYou ? `, ${formatDuration(withYou.get(tracePerson.id) ?? 0)} of it with you` : ''
+                      !withYou ? '' : withYou.get(tracePerson.id) ? `, ${formatDuration(withYou.get(tracePerson.id)!)} of it with you` : ', never when you are'
                     }.`
                   )
                 ) : (

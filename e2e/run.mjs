@@ -531,6 +531,7 @@ try {
     );
   }
   assert.equal(await p1.locator('.people-list li', { hasText: 'Faye' }).locator('.with-you').count(), 0, 'not shown against yourself');
+  const hintHeight = (await p1.locator('.group-hint').boundingBox()).height;
   await tap(p1, cdp, '.legend .toggle:text("my times")');
   assert.equal(await p1.locator('.legend .toggle').getAttribute('aria-pressed'), 'true');
   assert.equal(await p1.locator('.group-hint').innerText(), 'Outlined: when you’re free.');
@@ -545,6 +546,7 @@ try {
     'a tap pins someone’s times, on a phone too',
   );
   assert.equal(await p1.locator('.heat .cell[data-outline="2"]').count(), Object.keys(boAnswers.marks).length, 'Bo’s times are traced');
+  assert.equal((await p1.locator('.group-hint').boundingBox()).height, hintHeight, 'the hint keeps to one line, so the grid holds still');
   await shot(p1, '05b-with-you-phone');
   await tap(p1, cdp, '.people-list li:has-text("Bo") .toggle:text("show")');
   assert.equal(await p1.locator('.heat .cell[data-outline]').count(), 0, 'a second tap lets go');

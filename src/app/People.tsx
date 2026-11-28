@@ -85,6 +85,7 @@ export function People({
                     aria-pressed={pinned === p.id}
                     onClick={() => onPin(pinned === p.id ? null : p.id)}
                     title={`Trace ${p.id === meId ? 'your' : `${p.name}’s`} times on the grid`}
+                    aria-label={`show ${p.id === meId ? 'your' : `${p.name}’s`} times`}
                   >
                     show
                   </button>

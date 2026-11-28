@@ -615,7 +615,8 @@ option { background: var(--wall); color: var(--ink); }
   .best-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 2.5rem; max-width: 60rem; }
   .best-item { padding-inline: 0; }
 }
-.group-hint { margin: -0.4rem 0 0.8rem; }
+/* One line, always: wrapping when someone's traced would push the grid down under your finger. */
+.group-hint { margin: -0.4rem 0 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .group-hint[data-tracing] { color: var(--moon); }
 .hint-mouse { display: none; }
 @media (min-width: 960px) { .hint-touch { display: none; } .hint-mouse { display: inline; } }
