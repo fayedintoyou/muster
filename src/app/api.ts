@@ -2,6 +2,7 @@ import type { Marks, Person, PollSettings, PollState } from '../core/types';
 import type { Raid } from '../core/raid';
 import type { Team } from '../core/team';
 import type { Move, SignupStatus } from '../core/signup';
+import type { Absence } from '../core/absence';
 
 export class ApiError extends Error {
   constructor(
@@ -163,6 +164,18 @@ export const api = {
   /** Takes off someone's password and Discord link, for an organizer helping them back in. */
   unlock(id: string, personId: string, admin: string) {
     return call<PollState>(`/api/polls/${id}/people/${personId}/unlock`, { method: 'POST', admin });
+  },
+  /** The dated absences this browser may see: everyone's for an organizer, or just your own. */
+  absences(id: string, auth: { token?: string; admin?: string }) {
+    return call<{ absences: Record<string, Absence[]> }>(`/api/polls/${id}/absences`, auth);
+  },
+  /** Someone's whole list of dated absences, replaced. */
+  setAbsences(id: string, personId: string, auth: { token?: string; admin?: string }, absences: Absence[]) {
+    return call<{ absences: Absence[]; version: number }>(`/api/polls/${id}/people/${personId}/absences`, {
+      method: 'PUT',
+      ...auth,
+      body: JSON.stringify({ absences }),
+    });
   },
   remove(id: string, personId: string, auth: { token?: string; admin?: string }) {
     return call<{ version: number }>(`/api/polls/${id}/people/${personId}`, { method: 'DELETE', ...auth });

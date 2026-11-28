@@ -671,6 +671,17 @@ option { background: var(--wall); color: var(--ink); }
 .my-note .muted { font-size: 0.875rem; }
 .my-note textarea { min-height: 3.2rem; font-size: 0.9375rem; padding: 0.45rem 0.6rem; }
 
+/* Dated absences: your own, under your times. */
+.my-away { margin-top: 1.1rem; max-width: 30rem; font-size: 0.875rem; }
+.my-away > .muted { margin: 0 0 0.35rem; }
+.my-away-list { list-style: none; margin: 0 0 0.4rem; padding: 0; display: grid; gap: 0.3rem; font-size: 0.9375rem; }
+.my-away-list li { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.2rem 1rem; }
+.my-away-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 1.1rem; }
+.my-away-form { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem 0.75rem; margin-top: 0.4rem; }
+.my-away-form label { display: grid; gap: 0.25rem; min-width: 0; }
+.my-away-form input { padding: 0.4rem 0.6rem; font-size: 0.9375rem; min-height: 2.4rem; }
+.my-away-note, .my-away-form .my-away-actions { grid-column: 1 / -1; }
+
 /* How your answers are kept yours: a password, Discord, or neither. */
 .my-lock { margin-top: 1.1rem; max-width: 30rem; font-size: 0.875rem; }
 .my-lock > .muted { margin: 0 0 0.25rem; }
@@ -1125,6 +1136,7 @@ button.row-head:hover { color: var(--lamp); }
 .roster-name { color: var(--class, var(--ink)); }
 .roster-name .muted { font-size: 0.8125rem; }
 .event-quiet { color: #d7cfc3; }
+.event-away { color: var(--moon); font-size: 0.875rem; }
 .event-details { margin-top: 0.75rem; }
 .event-details summary {
   cursor: pointer;
