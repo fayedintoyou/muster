@@ -10,6 +10,7 @@ import { seat } from './seating';
 import { raidCalendar, raidNights, validateRaid } from './raid';
 import { raidsClash, teamClashes, validateTeam } from './team';
 import { nextSignup, roster, usuallyFree, validateSignup } from './signup';
+import { awayOn, currentAbsences, spanDays, validateAbsences } from './absence';
 import type { Person, PollSettings } from './types';
 
 const NY = 'America/New_York';
@@ -382,5 +383,47 @@ describe('sign-ups', () => {
     expect(validateSignup({ status: 'late' }).ok).toBe(false);
     expect(validateSignup({ status: 'maybe' }).ok).toBe(false);
     expect(validateSignup({ status: null })).toEqual({ ok: true, value: null });
+  });
+});
+
+describe('dated absences', () => {
+  const today = { y: 2026, m: 12, d: 1 };
+  const span = (from: string, to: string, note = '') => ({ from, to, note });
+
+  it('counts both ends, across a new year', () => {
+    expect(spanDays({ y: 2026, m: 12, d: 22 }, { y: 2027, m: 1, d: 2 })).toBe(12);
+    expect(spanDays(today, today)).toBe(1);
+  });
+
+  it('covers every night from the first to the last', () => {
+    const list = [span('2026-12-22', '2027-01-02', 'holidays')];
+    expect(awayOn(list, '2026-12-21')).toBeUndefined();
+    expect(awayOn(list, '2026-12-22')?.note).toBe('holidays');
+    expect(awayOn(list, '2026-12-31')).toBeDefined();
+    expect(awayOn(list, '2027-01-02')).toBeDefined();
+    expect(awayOn(list, '2027-01-03')).toBeUndefined();
+    expect(awayOn(undefined, '2026-12-22')).toBeUndefined();
+  });
+
+  it('checks dates, order, length and how many', () => {
+    expect(validateAbsences([span('2026-12-22', '2027-01-02', '  family \n trip ')], today)).toEqual({
+      ok: true,
+      value: [span('2026-12-22', '2027-01-02', 'family trip')],
+    });
+    expect(validateAbsences([span('2026-12-22', '2026-12-21')], today).ok).toBe(false);
+    expect(validateAbsences([span('2026-02-30', '2026-03-01')], today).ok).toBe(false);
+    // 60 nights is fine, 61 isn't.
+    expect(validateAbsences([span('2026-12-01', '2027-01-29')], today).ok).toBe(true);
+    expect(validateAbsences([span('2026-12-01', '2027-01-30')], today).ok).toBe(false);
+    expect(validateAbsences([span('2028-01-01', '2028-01-02')], today).ok).toBe(false);
+    const thirteen = Array.from({ length: 13 }, (_, i) => span(`2027-01-${10 + i}`, `2027-01-${10 + i}`));
+    expect(validateAbsences(thirteen, today).ok).toBe(false);
+    expect(validateAbsences(thirteen.slice(0, 12), today).ok).toBe(true);
+  });
+
+  it('drops absences already over, and sorts the rest', () => {
+    const checked = validateAbsences([span('2027-01-05', '2027-01-06'), span('2026-11-01', '2026-11-30'), span('2026-11-30', '2026-12-01')], today);
+    expect(checked.ok && checked.value.map((a) => a.from)).toEqual(['2026-11-30', '2027-01-05']);
+    expect(currentAbsences([span('2026-11-01', '2026-11-30'), span('2026-12-01', '2026-12-01')], today)).toEqual([span('2026-12-01', '2026-12-01')]);
   });
 });

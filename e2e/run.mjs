@@ -618,6 +618,86 @@ try {
   await t10Maker.locator('.event-person', { hasText: 'Faye' }).locator('button:text("undo bench")').click();
   await t10Maker.locator('.event-roster :text("Faye")').waitFor();
   await shot(p2, '06f-signups-desk');
+
+  // ---- Dated absences: Bo is away for the next four weeks, so every night counts him out ----
+  const nyDate = (days) => {
+    const d = new Date(Date.now() + days * 86_400_000);
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(d);
+  };
+  await p2.click('.tabs button:text("your times")');
+  await p2.click('.my-away button:text("add dates away")');
+  await p2.fill('.my-away-form input[type="date"] >> nth=0', nyDate(0));
+  assert.equal(await p2.locator('.my-away-form input[type="date"]').nth(1).inputValue(), nyDate(0), 'the last night follows the first');
+  await p2.fill('.my-away-form input[type="date"] >> nth=1', nyDate(27));
+  await p2.fill('.my-away-form .my-away-note input', 'family');
+  await p2.click('.my-away-form button:text("save")');
+  await p2.waitForSelector('.my-away-list li:has-text("family")');
+  // Changing one: the note.
+  await p2.click('.my-away-list li button:text("change")');
+  await p2.fill('.my-away-form .my-away-note input', 'holidays');
+  await p2.click('.my-away-form button:text("save")');
+  await p2.waitForSelector('.my-away-list li:has-text("holidays")');
+  assert.equal(await p2.locator('.my-away-list li').count(), 1, 'changing keeps one absence');
+  // Longer than 60 days is two absences, and the page says so before the Worker does.
+  await p2.click('.my-away button:text("add dates away")');
+  await p2.fill('.my-away-form input[type="date"] >> nth=0', nyDate(30));
+  await p2.fill('.my-away-form input[type="date"] >> nth=1', nyDate(100));
+  await p2.click('.my-away-form button:text("save")');
+  assert.match(await p2.locator('.my-away .error').innerText(), /at most 60 days/);
+  await p2.click('.my-away-form button:text("cancel")');
+  await p2.locator('.my-away').screenshot({ path: `${SHOTS}06g-away-desk.png` });
+
+  // The organizer sees him away on a night he hasn't answered, with the note, and not as unanswered.
+  await p1.reload();
+  await p1.click('.tabs button:text("teams")');
+  await t10Maker.locator('.event-nights button').nth(1).click();
+  await t10Maker.locator('.event-line:has-text("away")').waitFor();
+  assert.match(await t10Maker.locator('.event-line:has-text("away")').innerText(), /Bo\s[\s\S]*holidays/, 'Bo is away, with his note');
+  assert.doesNotMatch(await t10Maker.locator('.event-quiet').innerText(), /Bo/, 'and not among those who haven’t answered');
+  await shot(p1, '06h-away-phone');
+  // On the first night he said late before he went away, and what he said for a night wins.
+  await t10Maker.locator('.event-nights button').nth(0).click();
+  assert.match(await t10Maker.locator('.event-roster').innerText(), /Bo/, 'an answer for the night wins over the absence');
+
+  // Nobody else sees it: not a browser that isn't signed in, and not the poll's state.
+  const outsider = await browser.newContext({ viewport: { width: 1366, height: 900 }, timezoneId: 'Europe/Berlin' });
+  await outsider.addInitScript(() => localStorage.setItem('muster:tour', 'done'));
+  const pub = await outsider.newPage();
+  watch(pub, 'outsider');
+  await pub.goto(pollUrl);
+  await pub.click('.tabs button:text("teams")');
+  const t10Pub = pub.locator('.team[aria-label="Thursday 10"]');
+  await t10Pub.locator('.event-nights button').nth(1).click();
+  await t10Pub.locator('.event-quiet').waitFor();
+  assert.equal(await t10Pub.locator('.event-line:has-text("away")').count(), 0, 'no away line for the public');
+  assert.doesNotMatch(await pub.locator('body').innerText(), /holidays/, 'nor the note');
+  const publicState = await fetch(`${BASE}/api/polls/${pollId}`).then((r) => r.text());
+  assert.doesNotMatch(publicState, /holidays|absences/, 'the poll’s state carries no absences');
+  assert.deepEqual(await fetch(`${BASE}/api/polls/${pollId}/absences`).then((r) => r.json()), { absences: {} }, 'and asking without signing in gets none');
+  await outsider.close();
+
+  // Bo comes back early: signing up for a night inside the absence counts.
+  await p2.click('.tabs button:text("teams")');
+  const t10Bo = p2.locator('.team[aria-label="Thursday 10"]');
+  await t10Bo.locator('.event-nights button').nth(1).click();
+  assert.match(await t10Bo.locator('.event-me').innerText(), /away \(holidays\), unless you sign up/, 'Bo is told he counts as away');
+  await t10Bo.locator('.event-me button:text-is("in")').click();
+  await t10Bo.locator('.event-roster :text("Bo")').waitFor();
+  assert.equal(await t10Bo.locator('.event-line:has-text("away")').count(), 0, 'and is no longer away that night');
+  await p1.reload();
+  await p1.click('.tabs button:text("teams")');
+  await t10Maker.locator('.event-nights button').nth(1).click();
+  await t10Maker.locator('.event-roster :text("Bo")').waitFor();
+  assert.equal(await t10Maker.locator('.event-line:has-text("away")').count(), 0, 'the organizer sees him seated');
+  // A phone's view of adding one.
+  await p1.click('.tabs button:text("your times")');
+  await p1.click('.my-away button:text("add dates away")');
+  await p1.locator('.my-away').screenshot({ path: `${SHOTS}06i-away-form-phone.png` });
+  await p1.click('.my-away-form button:text("cancel")');
+  // And taking it off.
+  await p2.click('.tabs button:text("your times")');
+  await p2.click('.my-away-list li button:text("remove")');
+  await p2.waitForSelector('.my-away-list', { state: 'detached' });
   await p2.click('.tabs button:text("everyone")');
 
   await shot(p2, '07-desk-full');

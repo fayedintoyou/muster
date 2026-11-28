@@ -3,6 +3,7 @@ import type { Raid } from './raid';
 import { parseSlotKey } from './slots';
 import { type Seating, seat } from './seating';
 import { type Result } from './validate';
+import { type Absence, awayOn } from './absence';
 
 // Sign-ups: each night of a locked-in raid is an event people answer in, late, tentative or out. Being
 // free (the poll), signing up (here) and turning up are different things, so these sit beside the poll's
@@ -82,12 +83,17 @@ export interface Roster {
   out: string[];
   /** The raid's people who haven't answered for this night, with what the poll says. */
   unanswered: { id: string; usually: Usually }[];
+  /** The raid's people with a dated absence over this night and no answer for it: out, without asking. */
+  away: { id: string; note: string }[];
 }
 
 /**
  * Who's seated for one night. Seated first: anyone an organizer seated, then the team's members who are
  * coming (in the usual order, so the harder to place go first), then everyone else coming, first come
  * first served. Benched people wait on standby.
+ *
+ * Someone with a dated absence over the night counts as away, not unanswered, unless they've answered for
+ * it anyway: an answer for the night wins, so coming back early is one tap.
  */
 export function roster(
   people: Person[],
@@ -95,6 +101,7 @@ export function roster(
   raid: Pick<Raid, 'start' | 'minutes'>,
   team: { members: string[]; size: number; makeup: Record<string, number> } | null,
   poll: Pick<PollSettings, 'size' | 'makeup' | 'slot'>,
+  absences?: { night: string; of: Record<string, readonly Absence[]> },
 ): Roster {
   const signups = event?.people ?? {};
   const moves = event?.moves ?? {};
@@ -127,14 +134,18 @@ export function roster(
         flex: [],
         extra: [],
       };
-  const pool = team ? team.members : people.map((p) => p.id);
+  const pool = (team ? team.members : people.map((p) => p.id)).filter((id) => byId.has(id) && !signups[id]);
+  const away = new Map<string, Absence>();
+  for (const id of pool) {
+    const absence = absences && awayOn(absences.of[id], absences.night);
+    if (absence) away.set(id, absence);
+  }
   return {
     seating,
     standby: [...seating.extra, ...benched],
     tentative: answered(['tentative']),
     out: answered(['out']),
-    unanswered: pool
-      .filter((id) => byId.has(id) && !signups[id])
-      .map((id) => ({ id, usually: usuallyFree(byId.get(id)!, raid, poll.slot) })),
+    unanswered: pool.filter((id) => !away.has(id)).map((id) => ({ id, usually: usuallyFree(byId.get(id)!, raid, poll.slot) })),
+    away: [...away].map(([id, a]) => ({ id, note: a.note })),
   };
 }

@@ -12,6 +12,7 @@ import { RaidBanner } from './RaidBanner';
 import { TeamsPanel } from './TeamsPanel';
 import { MySignIn, discordMessage, discordReturn } from './SignIn';
 import { EventPanel, SignupButtons } from './Signups';
+import { AbsencesContext, MyAbsences, useAbsences } from './Absences';
 import { ANSWER_TOUR, Tour, tourSeen } from './Tour';
 import { nextRaid } from '../core/raid';
 import { POLL_RAID, eventKey } from '../core/signup';
@@ -183,6 +184,7 @@ export function PollPage({ id }: { id: string }) {
 
   const poll = state?.poll;
   const me = state?.people.find((p) => p.id === membership.personId);
+  const [absences, setOwnAbsences] = useAbsences(id, membership, state?.version);
 
   // An officer organizes from their own Discord sign-in, and stops when they're stood down.
   const officer = Boolean(me && me.discord && state?.officers.includes(me.id));
@@ -443,6 +445,7 @@ export function PollPage({ id }: { id: string }) {
   };
 
   return (
+    <AbsencesContext.Provider value={absences}>
     <div className="poll-page">
       <header className="topbar">
         <Wordmark />
@@ -685,6 +688,13 @@ export function PollPage({ id }: { id: string }) {
                     onBlur={(e) => void saveDetail({ note: e.target.value })}
                   />
                 </label>
+                <MyAbsences
+                  poll={poll}
+                  me={me}
+                  token={membership.token}
+                  absences={absences[me.id] ?? []}
+                  onSaved={(list) => setOwnAbsences(me.id, list)}
+                />
                 <MySignIn
                   pollId={id}
                   me={me}
@@ -901,6 +911,7 @@ export function PollPage({ id }: { id: string }) {
       </main>
       {touring && <Tour steps={ANSWER_TOUR} onClose={() => setTouring(false)} />}
     </div>
+    </AbsencesContext.Provider>
   );
 }
 

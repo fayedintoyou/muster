@@ -4,6 +4,7 @@ import { slotKeys } from '../src/core/slots';
 import { type Raid, raidNights, validateRaid } from '../src/core/raid';
 import { type EventSignups, POLL_RAID, eventKey, nextSignup, validateSignup } from '../src/core/signup';
 import { addDays, dateKey, today } from '../src/core/time';
+import { type Absence, currentAbsences, validateAbsences } from '../src/core/absence';
 import { TEAM_LIMITS, type Team, validateTeam } from '../src/core/team';
 import { REALM_TIME, ROLES, WOW_CLASSES, rolesFor } from '../src/core/classes';
 import {
@@ -50,6 +51,8 @@ interface StoredPerson {
   discord?: { id: string; name: string };
   /** Hashes of this person's sign-in tokens, newest last: one per device. */
   tokens: string[];
+  /** Dated absences, for every raid in their span. Never in the poll's state: see `absences()`. */
+  absences?: Absence[];
   created: number;
   updated: number;
 }
@@ -704,6 +707,45 @@ export class PollObject extends DurableObject<Env> {
     this.kv.put(key, event);
     this.bump();
     return { ok: true, state: this.state()! };
+  }
+
+  /**
+   * Dated absences, kept out of the state everyone with the link reads: an organizer gets everyone's, and
+   * anyone signed in gets their own.
+   */
+  async absences(auth: Auth): Promise<Outcome<{ absences: Record<string, Absence[]> }>> {
+    const tokenHash = auth.token ? await sha256(auth.token) : undefined;
+    const isAdmin = await this.adminOk(auth.admin);
+    const poll = this.poll();
+    if (!poll) return fail(404, 'This poll doesn’t exist.');
+    const from = addDays(today(poll.tz), -1);
+    const absences: Record<string, Absence[]> = {};
+    for (const p of this.people()) {
+      const mine = tokenHash !== undefined && p.tokens.some((t) => sameHash(t, tokenHash));
+      const list = currentAbsences(p.absences, from);
+      if ((isAdmin || mine) && list.length) absences[p.id] = list;
+    }
+    return { ok: true, absences };
+  }
+
+  /** Someone's whole list of absences, replaced: adding, changing and taking one off are all this. */
+  async setAbsences(personId: string, auth: Auth, input: unknown): Promise<Outcome<{ absences: Absence[]; version: number }>> {
+    const tokenHash = auth.token ? await sha256(auth.token) : undefined;
+    const isAdmin = await this.adminOk(auth.admin);
+    // No await from here.
+    const poll = this.poll();
+    if (!poll) return fail(404, 'This poll doesn’t exist.');
+    const person = this.kv.get<StoredPerson>(`p:${personId}`);
+    if (!person) return fail(404, 'That person isn’t in this poll any more.');
+    const mine = tokenHash !== undefined && person.tokens.some((t) => sameHash(t, tokenHash));
+    if (!mine && !isAdmin) return fail(403, 'Sign in as this person to change their absences.');
+    // Yesterday, in the poll's zone, so a night that started there yesterday can still be marked.
+    const checked = validateAbsences(input, addDays(today(poll.tz), -1));
+    if (!checked.ok) return fail(400, checked.error);
+    if (checked.value.length) person.absences = checked.value;
+    else delete person.absences;
+    this.kv.put(`p:${person.id}`, person);
+    return { ok: true, absences: checked.value, version: this.bump() };
   }
 
   async destroy(admin: string | undefined): Promise<Outcome<object>> {

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useContext, useState } from 'react';
 import type { Person, Poll, PollState } from '../core/types';
 import type { Raid } from '../core/raid';
 import { raidNights } from '../core/raid';
@@ -8,9 +8,10 @@ import { LATE_STEPS, type Move, type SignupStatus, type Usually, eventKey, roste
 import { ROLES } from '../core/classes';
 import { api } from './api';
 import { classStyle } from './ClassPicker';
+import { AbsencesContext } from './Absences';
 
 // Sign-ups for a locked-in raid's nights: your answer for a night, and who's seated, on standby, maybe,
-// out or still to answer. The raid's team is seated first, then anyone else, first come.
+// out, away or still to answer. The raid's team is seated first, then anyone else, first come.
 
 type Auth = { token?: string; admin?: string };
 
@@ -118,12 +119,14 @@ export function EventPanel({
   const nights = raidNights(poll, raid, Date.now(), poll.mode === 'weekly' ? 4 : 1).filter((n) => !n.off);
   const [picked, setPicked] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const absences = useContext(AbsencesContext);
   const night = nights.find((n) => n.night === picked) ?? nights[0];
   if (!night) return null;
   const event = state.signups[eventKey(owner, night.night)];
   const people = state.people;
   const byId = new Map(people.map((p) => [p.id, p]));
-  const r = roster(people, event, raid, team, poll);
+  const r = roster(people, event, raid, team, poll, { night: night.night, of: absences });
+  const meAway = me && r.away.find((a) => a.id === me.id);
   const members = new Set(team?.members ?? []);
   const moves = event?.moves ?? {};
   const signup = (id: string) => event?.people[id];
@@ -194,6 +197,7 @@ export function EventPanel({
       {me && (
         <p className="event-me">
           <span className="muted">You, {nightLabel(night.start, zone)}:</span>{' '}
+          {meAway && <span className="event-away">away{meAway.note && ` (${meAway.note})`}, unless you sign up</span>}
           <SignupButtons
             pollId={poll.id}
             owner={owner}
@@ -262,6 +266,17 @@ export function EventPanel({
           {r.out.map((id) => (
             <span key={id} className="event-person">
               {name(id)}
+            </span>
+          ))}
+        </p>
+      )}
+      {r.away.length > 0 && (
+        <p className="event-line">
+          <span className="event-role">away</span>
+          {r.away.map((a) => (
+            <span key={a.id} className="event-person">
+              {name(a.id)}
+              {a.note && <span className="muted">{a.note}</span>}
             </span>
           ))}
         </p>

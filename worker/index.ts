@@ -105,6 +105,13 @@ async function api(request: Request, env: Env, url: URL): Promise<Response> {
     return result.ok ? json(result.state) : fromFailure(result);
   }
 
+  // /absences: the dated absences this caller may see (an organizer's, or their own).
+  if (parts[3] === 'absences' && parts.length === 4) {
+    if (method !== 'GET') return error(405, 'Method not allowed.');
+    const result = await poll.absences(auth(request));
+    return result.ok ? json({ absences: result.absences }) : fromFailure(result);
+  }
+
   if (parts[3] === 'raid' && parts.length === 4) {
     if (method === 'PUT') {
       const body = await readJson(request);
@@ -173,6 +180,14 @@ async function api(request: Request, env: Env, url: URL): Promise<Response> {
     if (method !== 'POST') return error(405, 'Method not allowed.');
     const result = await poll.resetLock(auth(request).admin, personId);
     return result.ok ? json(result.state) : fromFailure(result);
+  }
+  // /people/<id>/absences: their whole list of dated absences.
+  if (parts.length === 6 && parts[5] === 'absences') {
+    if (method !== 'PUT') return error(405, 'Method not allowed.');
+    const body = await readJson(request);
+    if (body instanceof Response) return body;
+    const result = await poll.setAbsences(personId, auth(request), body.absences);
+    return result.ok ? json({ absences: result.absences, version: result.version }) : fromFailure(result);
   }
   if (parts.length !== 5) return error(404, 'Not found.');
   if (method === 'PUT') {
