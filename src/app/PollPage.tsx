@@ -16,7 +16,7 @@ import { ANSWER_TOUR, Tour, tourSeen } from './Tour';
 import { nextRaid } from '../core/raid';
 import { POLL_RAID, eventKey } from '../core/signup';
 import { slotLabel } from './GridFrame';
-import { HeatGrid } from './HeatGrid';
+import { HeatGlance, HeatGrid } from './HeatGrid';
 import { JoinForm } from './JoinForm';
 import { PaintGrid } from './PaintGrid';
 import { People } from './People';
@@ -104,6 +104,7 @@ export function PollPage({ id }: { id: string }) {
   // Traced on the everyone grid until let go: someone picked from the list, or your own times. One at a time.
   const [pinned, setPinned] = useState<string | null>(null);
   const [withMe, setWithMe] = useState(false);
+  const heatRef = useRef<HTMLDivElement>(null);
   const [copied, copy] = useCopied();
   // The guided tour, offered once to someone who hasn't answered yet.
   const [touring, setTouring] = useState(false);
@@ -364,6 +365,13 @@ export function PollPage({ id }: { id: string }) {
   const withYou = iAnswered
     ? new Map(people.map((p) => [p.id, sharedSlots(grid, myMarks, p.marks) * poll.slot]))
     : undefined;
+  const traceLine = !tracePerson
+    ? undefined
+    : tracePerson.id === me?.id
+      ? 'Outlined: when you’re free.'
+      : `Outlined: when ${tracePerson.name} is free${
+          !withYou ? '' : withYou.get(tracePerson.id) ? `, ${formatDuration(withYou.get(tracePerson.id)!)} of it with you` : ', never when you are'
+        }.`;
 
   const share = () => {
     if (canShare) {
@@ -757,18 +765,10 @@ export function PollPage({ id }: { id: string }) {
                 No times marked yet.
               </p>
             ) : (
-              <div className="group-main">
+              <div className="group-main" ref={heatRef}>
               {/* Always one line, so pointing along the list doesn't nudge the grid. */}
               <p className="hint group-hint" data-tracing={tracePerson ? true : undefined}>
-                {tracePerson ? (
-                  tracePerson.id === me?.id ? (
-                    'Outlined: when you’re free.'
-                  ) : (
-                    `Outlined: when ${tracePerson.name} is free${
-                      !withYou ? '' : withYou.get(tracePerson.id) ? `, ${formatDuration(withYou.get(tracePerson.id)!)} of it with you` : ', never when you are'
-                    }.`
-                  )
-                ) : (
+                {traceLine ?? (
                   <>
                     <span className="hint-touch">Tap a window to see who’s free.</span>
                     <span className="hint-mouse">Point at someone to trace their times.</span>
@@ -806,6 +806,16 @@ export function PollPage({ id }: { id: string }) {
               </div>
             )}
             <div className="group-side">
+            {counted.length > 0 && (
+              <HeatGlance
+                grid={grid}
+                tallies={tallies}
+                total={counted.length}
+                outline={tracePerson?.marks}
+                label={traceLine ?? 'Everyone’s times.'}
+                target={heatRef}
+              />
+            )}
             {counted.length > 0 && (
               <div className="slot-detail" aria-live="polite">
                 {focusSlot && focusTally ? (

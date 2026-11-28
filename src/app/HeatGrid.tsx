@@ -1,8 +1,8 @@
-import { type CSSProperties, useLayoutEffect, useRef, useState } from 'react';
+import { type CSSProperties, type RefObject, useLayoutEffect, useRef, useState } from 'react';
 import type { Grid } from '../core/grid';
 import type { Tally } from '../core/best';
 import type { Marks } from '../core/types';
-import { GridFrame, slotLabel } from './GridFrame';
+import { GridFrame, columnLabel, slotLabel } from './GridFrame';
 import { glow } from './glow';
 
 // Everyone's answers as lit panes: a slot glows warmer the more people are free (if needed counts as
@@ -72,5 +72,79 @@ export function HeatGrid({
         }}
       />
     </div>
+  );
+}
+
+// A small copy of the grid that stays under the tabs once the big one has scrolled away, so tracing someone
+// from far down the people list still shows when they're free. Tapping it goes back up to the big grid.
+export function HeatGlance({
+  grid,
+  tallies,
+  total,
+  outline,
+  label,
+  target,
+}: {
+  grid: Grid;
+  tallies: Map<string, Tally>;
+  total: number;
+  outline?: Marks;
+  label: string;
+  /** The big grid: the glance shows while it's out of view, and a tap scrolls back to it. */
+  target: RefObject<HTMLElement | null>;
+}) {
+  const [shown, setShown] = useState(false);
+  const self = useRef<HTMLButtonElement>(null);
+  useLayoutEffect(() => {
+    const el = target.current;
+    const glance = self.current;
+    if (!el || !glance || getComputedStyle(glance).display === 'none') return;
+    // Shown once what's left of the big grid fits under the glance, so it covers that rather than
+    // leaving the bottom rows peeking out under the frozen nights.
+    const under = Math.round(glance.offsetTop + glance.offsetHeight);
+    const seen = new IntersectionObserver(
+      ([entry]) => setShown(!entry.isIntersecting && entry.boundingClientRect.top < under),
+      { rootMargin: `-${under}px 0px 0px 0px` },
+    );
+    seen.observe(el);
+    return () => seen.disconnect();
+  }, [target, grid]);
+  const rowPx = Math.max(4, Math.min(9, Math.floor(140 / grid.rows.length)));
+  return (
+    <button
+      type="button"
+      ref={self}
+      className="heat-glance"
+      data-shown={shown || undefined}
+      tabIndex={shown ? 0 : -1}
+      aria-hidden={!shown}
+      aria-label={`${label} Back to the grid.`}
+      onClick={() => target.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+    >
+      <span className="heat-glance-label">{label}</span>
+      <span
+        className="heat-glance-grid"
+        style={{ '--cols': grid.columns.length, '--row': `${rowPx}px` } as CSSProperties}
+      >
+        {grid.columns.map((_, col) => (
+          <span key={`d${col}`} className="heat-glance-day">
+            {columnLabel(grid, col).weekday}
+          </span>
+        ))}
+        {grid.cells.flatMap((row, r) =>
+          row.map((slot, col) =>
+            slot ? (
+              <span
+                key={slot.key}
+                data-outline={outline ? (outline[slot.key] ?? 0) : undefined}
+                style={{ background: glow(Math.pow(heatLevel(tallies.get(slot.key), total), 0.85)) }}
+              />
+            ) : (
+              <span key={`x${r}-${col}`} data-empty />
+            ),
+          ),
+        )}
+      </span>
+    </button>
   );
 }

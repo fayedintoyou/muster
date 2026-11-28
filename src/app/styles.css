@@ -715,10 +715,52 @@ option { background: var(--wall); color: var(--ink); }
 }
 .heat-wrap[data-wide] .row-head { position: sticky; left: 0; z-index: 3; background: var(--night); box-shadow: 3px 0 0 var(--night); }
 .heat-wrap[data-wide] .slot-grid-corner { left: 0; }
+/* The glance: a small copy of the grid held under the tabs once the big one scrolls away, phones only. */
+.heat-glance {
+  position: fixed;
+  z-index: 4;
+  top: calc(3.7rem + 1px);
+  left: 0;
+  right: 0;
+  display: block;
+  width: 100%;
+  padding: 0.45rem 1.25rem 0.6rem;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--night);
+  color: var(--moon);
+  text-align: left;
+  cursor: pointer;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-0.4rem);
+  transition: opacity 160ms ease, transform 160ms ease, visibility 0s 160ms;
+}
+.heat-glance[data-shown] { opacity: 1; visibility: visible; transform: none; transition: opacity 160ms ease, transform 160ms ease; }
+.heat-glance-label { display: block; margin-bottom: 0.35rem; font-size: 0.8125rem; line-height: 1.3; }
+.heat-glance-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+  grid-template-rows: auto;
+  grid-auto-rows: var(--row);
+  gap: 1px 2px;
+}
+.heat-glance-grid > span { border-radius: 1px; }
+.heat-glance-grid > span[data-empty] { background: transparent; }
+/* Too small to outline: whoever's traced keeps their glow and the rest fades back. */
+.heat-glance-grid > span[data-outline='1'] { opacity: 0.7; }
+.heat-glance-grid > span[data-outline='0'] { opacity: 0.18; }
+.heat-glance-grid > .heat-glance-day { height: auto; font-family: var(--mono); font-size: 0.5625rem; color: var(--muted); text-align: center; line-height: 1.4; }
+@media (max-width: 420px) { .heat-glance { padding-left: 1rem; padding-right: 1rem; } }
+
 /* On a desktop the tabs don't follow the page down. */
 @media (min-width: 960px) {
   .heat-wrap { --heads-top: 0px; }
   .heat-wrap[data-wide] { max-height: calc(100vh - 3rem); }
+  .heat-glance { display: none; }
+  /* A long people list scrolls beside the grid, so the grid never leaves the screen. */
+  .group-side { max-height: calc(100vh - 3rem); overflow-y: auto; padding-right: 0.5rem; }
 }
 .slot-grid-corner { min-height: 2.6rem; }
 

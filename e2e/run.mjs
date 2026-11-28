@@ -723,6 +723,21 @@ try {
   assert.equal(nightsClip.split('\n').length, 5, `one discord line a night (got ${nightsClip})`);
   await shot(p4, '09b-grouped-best-phone');
 
+  // A guild-sized list: eighteen more, each free a different two hours on a few nights.
+  for (let i = 0; i < 18; i++) {
+    const nights = [1, 2, 3, 4, 5, 6, 0].filter((_, d) => (i + d) % 3 !== 0);
+    const from = 1140 + (i % 6) * 30;
+    const keys = {};
+    for (const d of nights) for (let m = from; m < from + 120; m += 15) keys[`w${d}/${m}`] = 2;
+    await fetch(`${BASE}/api/polls/${dense.id}/people`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: `Raider${i + 1}`, marks: keys }),
+    });
+  }
+  await p4.reload();
+  await p4.waitForSelector('.tabs');
+
   // Scrolling down a grid taller than the phone keeps the nights in view, just under the tabs.
   await p4.click('.tabs button:text("everyone")');
   assert.equal(await p4.locator('.heat-wrap').getAttribute('data-wide'), null, 'seven nights fit the phone across');
@@ -735,6 +750,21 @@ try {
   const onTop = await p4.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest('.col-head') !== null, [night.x + night.width / 2, night.y + night.height / 2]);
   assert.ok(onTop, 'over the cells scrolled under them');
   await shot(p4, '09d-frozen-heads-phone', false);
+
+  // Down in the people list the big grid has gone, so a small copy holds under the tabs and traces whoever's shown.
+  assert.equal(await p4.locator('.heat-glance[data-shown]').count(), 0, 'no glance while the grid is in view');
+  await p4.locator('.people-list li').last().evaluate((e) => e.scrollIntoView({ block: 'end' }));
+  await p4.waitForSelector('.heat-glance[data-shown]');
+  // Raider10 is free 7:30–9:30pm on four of the nights: 32 quarter hours.
+  await tap(p4, cdp4, '.people-list li:has-text("Raider10") .toggle:text("show")');
+  assert.equal(await p4.locator('.heat-glance[data-shown]').count(), 1, 'still shown after tapping show far down the list');
+  assert.equal(await p4.locator('.heat-glance-grid > [data-outline="2"]').count(), 32, 'the glance traces Raider10’s times');
+  assert.match(await p4.locator('.heat-glance-label').innerText(), /^Outlined: when Raider10 is free/);
+  await p4.waitForFunction(() => getComputedStyle(document.querySelector('.heat-glance')).opacity === '1');
+  await shot(p4, '09e-glance-phone', false);
+  await tap(p4, cdp4, '.heat-glance');
+  await p4.waitForFunction(() => document.querySelector('.group-main').getBoundingClientRect().top > 0);
+  await p4.waitForSelector('.heat-glance:not([data-shown])', { state: 'attached' });
   await p4.click('.tabs button:text("your times")');
 
   // ---- A raid of 10: everyone takes one seat, in a role they play ----
