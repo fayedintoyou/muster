@@ -3,6 +3,7 @@ import type { Raid } from '../core/raid';
 import type { Team } from '../core/team';
 import type { Move, SignupStatus } from '../core/signup';
 import type { Absence } from '../core/absence';
+import type { GroupMove } from '../core/groups';
 
 export class ApiError extends Error {
   constructor(
@@ -143,6 +144,30 @@ export const api = {
       method: 'PUT',
       admin,
       body: JSON.stringify({ move }),
+    });
+  },
+  /** Someone seated into a group, out of one, or swapped with someone else. */
+  group(id: string, admin: string, event: { owner: string; night: string }, personId: string, move: GroupMove) {
+    return call<PollState>(`/api/polls/${id}/groups/${event.owner}/${event.night}/${personId}`, {
+      method: 'PUT',
+      admin,
+      body: JSON.stringify(move),
+    });
+  },
+  /** The raid's template laid over one night, or with `clear`, the night's groups emptied. */
+  groups(id: string, admin: string, event: { owner: string; night: string }, clear = false) {
+    return call<PollState>(`/api/polls/${id}/groups/${event.owner}/${event.night}`, {
+      method: clear ? 'DELETE' : 'PUT',
+      admin,
+      body: clear ? undefined : JSON.stringify({ template: true }),
+    });
+  },
+  /** One night's groups saved as the raid's template. */
+  saveLayout(id: string, admin: string, event: { owner: string; night: string }) {
+    return call<PollState>(`/api/polls/${id}/layouts/${event.owner}`, {
+      method: 'PUT',
+      admin,
+      body: JSON.stringify({ night: event.night }),
     });
   },
   /** Where to send the browser to sign in with Discord, or with a person and their token, to link it. */

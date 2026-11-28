@@ -9,6 +9,7 @@ import { ROLES } from '../core/classes';
 import { api } from './api';
 import { classStyle } from './ClassPicker';
 import { AbsencesContext } from './Absences';
+import { Groups } from './Groups';
 
 // Sign-ups for a locked-in raid's nights: your answer for a night, and who's seated, on standby, maybe,
 // out, away or still to answer. The raid's team is seated first, then anyone else, first come.
@@ -293,6 +294,22 @@ export function EventPanel({
               </span>
             ))}
         </p>
+      )}
+      {r.seating.seated.length > 0 && (
+        <Groups
+          key={night.night}
+          pollId={poll.id}
+          owner={owner}
+          night={night.night}
+          seated={r.seating.seated}
+          size={size}
+          byId={byId}
+          stored={state.groups?.[eventKey(owner, night.night)]}
+          layout={state.layouts?.[owner]}
+          me={me}
+          admin={auth.admin}
+          onState={onState}
+        />
       )}
       {error && (
         <p className="error" role="alert">

@@ -1181,3 +1181,68 @@ button.row-head:hover { color: var(--lamp); }
 @media (prefers-reduced-motion: reduce) {
   .tour-spot { animation: none; }
 }
+
+/* ---------- Groups of five for a raid night ---------- */
+
+.groups { display: grid; gap: 0.5rem; margin-top: 0.4rem; padding-top: 0.7rem; border-top: 1px solid var(--line); }
+.groups-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.2rem 1rem; margin: 0; font-size: 0.8125rem; }
+.group-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr));
+  gap: 0.5rem;
+}
+.group { display: grid; align-content: start; gap: 0.2rem; padding: 0.45rem 0.55rem 0.55rem; border: 1px solid var(--line-strong); border-radius: 6px; }
+.group-name {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+.group-hints { color: var(--moon); }
+.group-slot { min-height: 2.35rem; display: flex; align-items: stretch; }
+.group-person {
+  flex: 1;
+  display: grid;
+  justify-items: start;
+  align-content: center;
+  gap: 0.05rem;
+  min-width: 0;
+  padding: 0.15rem 0.35rem;
+  margin: 0 -0.35rem;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 0.9375rem;
+  text-align: left;
+}
+button.group-person { cursor: grab; touch-action: manipulation; }
+button.group-person:hover { border-color: var(--line-strong); }
+button.group-person[aria-pressed='true'] { border-color: var(--lamp); background: var(--lamp-soft); }
+button.group-person:disabled { cursor: progress; }
+.event-person .group-person { margin: 0; }
+.group-meta { font-family: var(--mono); font-size: 0.6875rem; color: var(--muted); }
+.group-empty { border-bottom: 1px dashed var(--line-strong); margin-bottom: 0.3rem; min-height: 2.05rem; }
+.group-free {
+  justify-content: center;
+  align-items: center;
+  border: 1px dashed var(--lamp);
+  border-radius: 4px;
+  background: none;
+  color: var(--lamp);
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+.groups-unplaced { align-items: center; }
+.groups-actions { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.4rem 1.2rem; margin: 0; font-size: 0.8125rem; }
+@media (max-width: 560px) {
+  .group-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

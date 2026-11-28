@@ -1,5 +1,6 @@
 import type { Raid } from './raid';
 import type { EventSignups } from './signup';
+import type { Groups } from './groups';
 import type { Team } from './team';
 
 export type Mode = 'weekly' | 'dates';
@@ -75,6 +76,10 @@ export interface PollState {
   teams: Team[];
   /** Who's coming on each raid night from yesterday on, by event key ('<team or raid>/<night>'). */
   signups: Record<string, EventSignups>;
+  /** How the organizer split each of those nights into groups, by event key. */
+  groups: Record<string, Groups>;
+  /** Each raid's saved group template, by its owner (a team's id, or 'raid'). */
+  layouts: Record<string, Groups>;
   /** People the poll's maker made officers: they organize it too, signed in with Discord. */
   officers: string[];
   version: number;
