@@ -1100,6 +1100,7 @@ button.row-head:hover { color: var(--lamp); }
 
 /* Raid teams, picked from everyone who answered. */
 .panels[data-tab='teams'] { display: none; }
+.panels[data-tab='events'] { display: none; }
 .teams { display: grid; gap: 2rem; max-width: 44rem; }
 .team { padding-top: 1.2rem; border-top: 1px solid var(--line); }
 .team-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.4rem 1rem; }
@@ -1127,7 +1128,7 @@ button.row-head:hover { color: var(--lamp); }
 .signup { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; vertical-align: middle; }
 .segmented.small button { min-height: 1.9rem; padding: 0.15rem 0.7rem; font-size: 0.75rem; }
 .signup .segmented button[aria-pressed='true'] { background: var(--lamp); color: var(--night); font-weight: 500; }
-.signup select { width: auto; min-width: 8rem; min-height: 1.9rem; padding: 0.1rem 0.4rem; font-size: 0.8125rem; }
+.signup select { width: auto; min-width: 8rem; min-height: 1.9rem; padding: 0.1rem 1.7rem 0.1rem 0.4rem; text-overflow: ellipsis; font-size: 0.8125rem; }
 .raid-line .signup { margin-left: 0.25rem; }
 
 .event { margin-top: 1rem; display: grid; gap: 0.6rem; max-width: 46rem; }

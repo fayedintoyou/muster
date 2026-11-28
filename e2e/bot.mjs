@@ -368,6 +368,13 @@ try {
     'an alt that isn’t yours is refused',
   );
 
+  // Ana removes the alt: what she says next is on her main, and "out" still works.
+  await api('PUT', `/api/polls/${pollId}/people/${ana.person.id}`, { alts: [] }, { authorization: `Bearer ${ana.token}` });
+  assert.equal((await press(ANA, pollButton('out'))).body.type, 7, 'out, after the alt she was on is gone');
+  state = await api('GET', `/api/polls/${pollId}`);
+  assert.equal(state.signups[`raid/${tomorrow}`].people[ana.person.id].status, 'out');
+  assert.equal(state.signups[`raid/${tomorrow}`].people[ana.person.id].as, undefined, 'and back on her main');
+
   // ---- Team only: a closed run turns away anyone not on it ----
   state = await api('POST', `/api/polls/${pollId}/teams`, { name: 'Closed run', members: [ana.person.id], size: 10, makeup: {}, closed: true }, adminHeaders);
   const closed = state.teams.find((t) => t.name === 'Closed run');
@@ -396,6 +403,7 @@ try {
       data: { name: 'muster', options: [{ type: 1, name: 'event', options: Object.entries(options).map(([name, value]) => ({ name, value })) }] },
     });
   assert.match((await makeEvent({ name: 'Pug night', date: 'someday', time: '9pm' })).body.data.content, /can’t read “someday” as a date/);
+  assert.match((await makeEvent({ name: 'Pug night', date: 'saturn', time: '9pm' })).body.data.content, /can’t read “saturn” as a date/, 'only real day names');
   assert.match((await makeEvent({ name: 'Pug night', date: days[2], time: 'nine' })).body.data.content, /can’t read “nine” as a time/);
   assert.match((await makeEvent({ name: 'Pug night', date: days[2], time: '9pm', team: 'Nope' })).body.data.content, /no team called “Nope”/);
   mark = sent.length;

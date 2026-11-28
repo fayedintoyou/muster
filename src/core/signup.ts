@@ -102,7 +102,11 @@ export function nextSignup(before: Signup | undefined, change: SignupChange, now
 export function checkPlaying(person: Pick<Person, 'cls' | 'alts'>, change: SignupChange, before: Signup | undefined): Result<SignupChange> {
   const as = change.as === undefined ? before?.as : change.as;
   const alt = as ? person.alts.find((a) => a.id === as) : undefined;
-  if (as && !alt) return { ok: false, error: 'That alt isn’t one of yours any more.' };
+  if (as && !alt) {
+    // An alt removed since signing up on it: anything else said for the night is on the main.
+    if (change.as === undefined) return { ok: true, value: { ...change, as: null, specs: null } };
+    return { ok: false, error: 'That alt isn’t one of yours any more.' };
+  }
   if (!change.specs) return { ok: true, value: change };
   const cls = alt?.cls ?? person.cls;
   const known = specsFor(cls);
@@ -127,8 +131,10 @@ export interface Playing {
 export function playing(person: Person, signup: Pick<Signup, 'as' | 'specs'> | undefined, pollRoles: string[]): Playing {
   const alt = signup?.as ? person.alts.find((a) => a.id === signup.as) : undefined;
   const base = alt ?? person;
-  const specs = signup?.specs?.length ? signup.specs : base.specs;
-  const changed = Boolean(signup?.specs?.length) && specs.join() !== base.specs.join();
+  // A night's specs from before a class change are dropped: they'd be another class's.
+  const night = signup?.specs?.filter((x) => specsFor(base.cls).includes(x)) ?? [];
+  const specs = night.length ? night : base.specs;
+  const changed = night.length > 0 && specs.join() !== base.specs.join();
   return {
     name: base.name,
     cls: base.cls,

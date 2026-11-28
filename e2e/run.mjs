@@ -869,6 +869,7 @@ try {
   assert.match(await pug.locator('.team-size').innerText(), /10 players.*open to the guild/);
   await pug.locator('.event-me button:text-is("in")').click();
   await pug.locator('.event-roster :text("Faye")').waitFor();
+  assert.equal(await p1.locator('#panel-mine').isVisible(), false, 'the events tab shows only the events');
   await shot(p1, '06j-events-phone');
   // Bo answers from the line at the top, as for a raid.
   await p2.reload();
@@ -877,6 +878,7 @@ try {
   await p2.click('.tabs button:text("events (1)")');
   await p2.locator('.team[aria-label="Pug night"] .event-roster :text("Bo")').waitFor();
   assert.equal(await p2.locator('.events button:text("new event")').count(), 0, 'only organizers make events');
+  assert.equal(await p2.locator('#panel-mine').isVisible(), false, 'on a desktop too');
   await shot(p2, '06k-events-desk');
   await p2.click('.tabs button:text("everyone")');
 

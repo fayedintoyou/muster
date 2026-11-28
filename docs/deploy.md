@@ -81,7 +81,8 @@ DISCORD_BOT_TOKEN="$(security find-generic-password -a "$USER" -s DISCORD_BOT_TO
 Without the token the bot stays quiet and the organizer tab says it isn't set up; the preview Worker has
 none. A guild adds the bot and connects a channel from a poll's organizer tab. Each Discord server also has
 a small Durable Object (`GuildObject`, migration v2) saying which poll each of its channels posts for, so
-`/muster event` typed in a channel finds its poll.
+`/muster event` typed in a channel finds its poll. A channel connected before `GuildObject` existed isn't
+in it until it's connected again with `/muster connect`.
 
 ## Checking
 

@@ -41,6 +41,8 @@ export function validateEvent(
   input: unknown,
   teamIds: ReadonlySet<string>,
   now = Date.now(),
+  /** When it starts now, for a change: an event under way can still get a new note or be called off. */
+  was?: number,
 ): Result<Pick<OneOff, 'name' | 'at' | 'minutes' | 'size' | 'makeup' | 'team' | 'note' | 'off'>> {
   if (!input || typeof input !== 'object') return fail('Missing the event’s details.');
   const raw = input as Record<string, unknown>;
@@ -48,7 +50,7 @@ export function validateEvent(
   if (!name) return fail('Give the event a name.');
   const at = Number(raw.at);
   if (!Number.isInteger(at) || at % MINUTE !== 0) return fail('Pick when it starts.');
-  if (at < now - 60 * MINUTE) return fail('That time has already passed.');
+  if (at !== was && at < now - 60 * MINUTE) return fail('That time has already passed.');
   if (at > now + AHEAD) return fail('Events can be up to a year ahead.');
   const minutes = Number(raw.minutes);
   if (!Number.isInteger(minutes) || minutes % 15 !== 0 || minutes < LIMITS.minLength || minutes > LIMITS.maxLength) {
@@ -126,8 +128,10 @@ export function currentEvents(events: OneOff[], now = Date.now()): OneOff[] {
   return events.filter((o) => o.at + o.minutes * MINUTE > now - 2 * DAY_MINUTES * MINUTE);
 }
 
-const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
-const WEEKDAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+const MONTHS = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+/** Which of `names` a word is, written out or cut short to at least three letters ("sat", "thurs", "sept"). */
+const nameIn = (names: string[], word: string) => (word.length >= 3 ? names.findIndex((n) => n.startsWith(word)) : -1);
 
 /**
  * A date and a time as people type them in Discord ("sat", "tomorrow", "Dec 12", "12/12", "2026-12-12";
@@ -144,20 +148,21 @@ export function parseWhen(dateText: string, timeText: string, zone: string, now 
     return parseDate(`${year + 1}-${String(m).padStart(2, '0')}-${String(day).padStart(2, '0')}`);
   };
   let date: YMD | null = null;
+  let weekday = false;
   let m: RegExpMatchArray | null;
   if (d === 'today' || d === 'tonight') date = t0;
   else if (d === 'tomorrow') date = addDays(t0, 1);
-  else if (WEEKDAYS.includes(d.slice(0, 3)) && /^[a-z]+$/.test(d)) {
-    const want = WEEKDAYS.indexOf(d.slice(0, 3));
-    date = addDays(t0, (want - weekdayOf(t0) + 7) % 7);
+  else if (nameIn(WEEKDAYS, d) >= 0) {
+    weekday = true;
+    date = addDays(t0, (nameIn(WEEKDAYS, d) - weekdayOf(t0) + 7) % 7);
   } else if ((m = d.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/))) date = ahead(Number(m[2]), Number(m[3]), Number(m[1]));
   else if ((m = d.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/))) {
     const y = m[3] ? (m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3])) : undefined;
     date = ahead(Number(m[1]), Number(m[2]), y);
-  } else if ((m = d.match(/^([a-z]{3})[a-z]* (\d{1,2})(?:st|nd|rd|th)?(?: (\d{4}))?$/)) && MONTHS.includes(m[1])) {
-    date = ahead(MONTHS.indexOf(m[1]) + 1, Number(m[2]), m[3] ? Number(m[3]) : undefined);
-  } else if ((m = d.match(/^(\d{1,2})(?:st|nd|rd|th)? ([a-z]{3})[a-z]*(?: (\d{4}))?$/)) && MONTHS.includes(m[2])) {
-    date = ahead(MONTHS.indexOf(m[2]) + 1, Number(m[1]), m[3] ? Number(m[3]) : undefined);
+  } else if ((m = d.match(/^([a-z]+) (\d{1,2})(?:st|nd|rd|th)?(?: (\d{4}))?$/)) && nameIn(MONTHS, m[1]) >= 0) {
+    date = ahead(nameIn(MONTHS, m[1]) + 1, Number(m[2]), m[3] ? Number(m[3]) : undefined);
+  } else if ((m = d.match(/^(\d{1,2})(?:st|nd|rd|th)? ([a-z]+)(?: (\d{4}))?$/)) && nameIn(MONTHS, m[2]) >= 0) {
+    date = ahead(nameIn(MONTHS, m[2]) + 1, Number(m[1]), m[3] ? Number(m[3]) : undefined);
   }
   if (!date) return fail(`muster can’t read “${dateText.trim()}” as a date. Try “sat”, “Dec 12” or “2026-12-12”.`);
 
@@ -169,5 +174,9 @@ export function parseWhen(dateText: string, timeText: string, zone: string, now 
   if (minute > 59 || (half ? hour < 1 || hour > 12 : hour > 23)) return fail(`“${timeText.trim()}” isn’t a time of day.`);
   if (half === 'p' && hour < 12) hour += 12;
   if (half === 'a' && hour === 12) hour = 0;
-  return { ok: true, value: zonedInstant(date, hour * 60 + minute, zone) };
+  // "sat 2pm" said on a Saturday afternoon means next Saturday.
+  if (weekday && zonedInstant(date, hour * 60 + minute, zone) < now) date = addDays(date, 7);
+  const at = zonedInstant(date, hour * 60 + minute, zone);
+  if (localTime(at, zone).minutes !== hour * 60 + minute) return fail(`${timeText.trim()} doesn’t happen that night: the clocks go forward.`);
+  return { ok: true, value: at };
 }

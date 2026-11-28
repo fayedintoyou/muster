@@ -936,9 +936,9 @@ export class PollObject extends DurableObject<Env> {
   private putEvent(eventId: string | undefined, input: unknown): Outcome<{ id: string; event: OneOff }> {
     if (!this.poll()) return fail(404, 'This poll doesn’t exist.');
     const teams = this.teams();
-    const checked = validateEvent(input, new Set(teams.map((t) => t.id)));
-    if (!checked.ok) return fail(400, checked.error);
     const events = currentEvents(this.events());
+    const checked = validateEvent(input, new Set(teams.map((t) => t.id)), Date.now(), events.find((o) => o.id === eventId)?.at);
+    if (!checked.ok) return fail(400, checked.error);
     let id = eventId;
     if (id === undefined) {
       if (events.length >= EVENT_LIMITS.events) return fail(400, `A poll can have at most ${EVENT_LIMITS.events} events coming up.`);
