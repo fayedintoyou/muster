@@ -10,6 +10,8 @@ import { Wordmark, navigate } from './App';
 import { BestTimes } from './BestTimes';
 import { RaidBanner } from './RaidBanner';
 import { TeamsPanel } from './TeamsPanel';
+import { EventsPanel } from './EventsPanel';
+import { raidsOf } from '../core/event';
 import { MySignIn, discordMessage, discordReturn } from './SignIn';
 import { EventPanel, SignupButtons } from './Signups';
 import { AbsencesContext, MyAbsences, useAbsences } from './Absences';
@@ -24,13 +26,14 @@ import { People } from './People';
 import { Organizer } from './Organizer';
 import { ZonePicker } from './ZonePicker';
 import { ClassPicker } from './ClassPicker';
+import { Alts } from './Alts';
 import { Composition } from './Composition';
 import { RoleIcon } from './icons';
 import { useCopied } from './copy';
 import { GLOW_GRADIENT } from './glow';
 import { type Membership, detectedZone, store } from './store';
 
-type Tab = 'mine' | 'group' | 'best' | 'teams' | 'organizer';
+type Tab = 'mine' | 'group' | 'best' | 'teams' | 'events' | 'organizer';
 type SaveState = 'idle' | 'waiting' | 'saving' | 'saved' | 'error';
 
 const REFRESH_MS = 15_000;
@@ -346,6 +349,13 @@ export function PollPage({ id }: { id: string }) {
 
   const link = `${location.origin}/e/${id}`;
   const nameOf = (pid: string) => state.people.find((p) => p.id === pid)?.name ?? 'someone';
+  const raids = raidsOf(state, state.people.map((p) => p.id));
+  const nowMs = Date.now();
+  const comingEvents = raids.filter((r) => r.kind === 'event' && r.event!.at + r.event!.minutes * MINUTE >= nowMs);
+  // Events in the next week that are on, and open to you: a line each at the top, to answer in one tap.
+  const soonEvents = comingEvents.filter(
+    (r) => !r.event!.off && r.event!.at - nowMs < 7 * 24 * 60 * MINUTE && (!r.seats?.closed || (me && r.seats.members.includes(me.id))),
+  );
   const firstSlot = grid.columns[0]?.slots[0];
   const nightEnd = firstSlot ? firstSlot.instant + grid.columns[0].slots.length * poll.slot * MINUTE : 0;
   const nightRange = firstSlot ? formatRange(firstSlot.instant, nightEnd, zone) : '';
@@ -510,6 +520,27 @@ export function PollPage({ id }: { id: string }) {
                 </RaidBanner>
               );
             })}
+          {soonEvents.map((r) => {
+            const night = r.raid.start.slice(0, 10);
+            return (
+              <RaidBanner key={r.owner} poll={{ ...poll, mode: 'dates' }} raid={r.raid} zone={zone} label={`${r.name}:`} compact>
+                {me && (
+                  <>
+                    {' '}
+                    <SignupButtons
+                      pollId={id}
+                      owner={r.owner}
+                      night={night}
+                      me={me}
+                      current={state.signups[eventKey(r.owner, night)]?.people[me.id]}
+                      auth={{ token: membership.token }}
+                      onState={applyState}
+                    />
+                  </>
+                )}
+              </RaidBanner>
+            );
+          })}
           {state.raid && (
             <RaidBanner
               poll={poll}
@@ -527,9 +558,7 @@ export function PollPage({ id }: { id: string }) {
                 <EventPanel
                   poll={poll}
                   state={state}
-                  owner={POLL_RAID}
-                  raid={state.raid}
-                  team={null}
+                  of={raids.find((r) => r.owner === POLL_RAID)!}
                   zone={zone}
                   me={me}
                   auth={{ token: membership.token, admin: membership.admin }}
@@ -568,6 +597,9 @@ export function PollPage({ id }: { id: string }) {
               ['best', 'best times'],
               ...(state.teams.length > 0 || membership.admin
                 ? ([['teams', state.teams.length ? `teams (${state.teams.length})` : 'teams']] as const)
+                : []),
+              ...(comingEvents.length > 0 || membership.admin
+                ? ([['events', comingEvents.length ? `events (${comingEvents.length})` : 'events']] as const)
                 : []),
               ...(membership.admin ? ([['organizer', 'organizer']] as const) : []),
             ] as const
@@ -669,6 +701,17 @@ export function PollPage({ id }: { id: string }) {
                         void saveDetail({ cls, specs });
                       }}
                     />
+                    {me.cls && (
+                      <Alts
+                        me={me}
+                        classes={poll.classes}
+                        onSave={async (alts) => {
+                          const { person } = await api.save(id, me.id, { token: membership.token }, { alts });
+                          mine.current = { id: person.id, updated: person.updated };
+                          setState((prev) => prev && { ...prev, people: prev.people.map((p) => (p.id === person.id ? { ...person, marks: p.marks } : p)) });
+                        }}
+                      />
+                    )}
                   </div>
                 ) : (
                   <label className="my-spec">
@@ -939,6 +982,20 @@ export function PollPage({ id }: { id: string }) {
               meId={me?.id}
               token={membership.token}
               nameOf={nameOf}
+              onState={applyState}
+            />
+          </section>
+        )}
+
+        {activeTab === 'events' && (
+          <section className="panel panel-events" id="panel-events" role="tabpanel" aria-labelledby="tab-events">
+            <EventsPanel
+              poll={poll}
+              state={state}
+              zone={zone}
+              admin={membership.admin}
+              meId={me?.id}
+              token={membership.token}
               onState={applyState}
             />
           </section>

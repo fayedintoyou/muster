@@ -11,11 +11,12 @@ import { Composition } from './Composition';
 import { RaidBanner } from './RaidBanner';
 import { RaidSize } from './RaidSize';
 import { EventPanel } from './Signups';
+import { raidsOf } from '../core/event';
 
 // Raid teams, picked from everyone who answered. The poll finds when the guild is free; here its maker
 // splits people into teams, and each team finds and locks in its own time from its members' answers.
 
-type Draft = Pick<Team, 'name' | 'members' | 'size' | 'makeup'>;
+type Draft = Pick<Team, 'name' | 'members' | 'size' | 'makeup' | 'closed'>;
 
 function sizeLine(t: Pick<Team, 'size' | 'makeup'>): string {
   if (!t.size) return 'any size';
@@ -85,7 +86,7 @@ export function TeamsPanel({
       {admin &&
         (making ? (
           <TeamForm
-            initial={{ name: `Team ${state.teams.length + 1}`, members: [], size: poll.size, makeup: poll.makeup }}
+            initial={{ name: `Team ${state.teams.length + 1}`, members: [], size: poll.size, makeup: poll.makeup, closed: false }}
             people={answered}
             teams={state.teams}
             slot={poll.slot}
@@ -165,7 +166,10 @@ function TeamCard({
     <section className="team" aria-label={team.name}>
       <div className="team-head">
         <h3>{team.name}</h3>
-        <p className="team-size">{sizeLine(team)}</p>
+        <p className="team-size">
+          {sizeLine(team)}
+          {team.closed && <span className="team-only"> · team only</span>}
+        </p>
       </div>
       {members.length === 0 ? (
         <p className="empty">No one picked yet.</p>
@@ -209,9 +213,7 @@ function TeamCard({
         <EventPanel
           poll={poll}
           state={state}
-          owner={team.id}
-          raid={team.raid}
-          team={team}
+          of={raidsOf(state, state.people.map((p) => p.id)).find((r) => r.owner === team.id)!}
           zone={zone}
           me={state.people.find((p) => p.id === meId)}
           auth={{ token, admin }}
@@ -310,6 +312,7 @@ function TeamForm({
   const [size, setSize] = useState(initial.size);
   const [makeup, setMakeup] = useState(initial.makeup);
   const [members, setMembers] = useState<string[]>(initial.members);
+  const [closed, setClosed] = useState(initial.closed);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const picked = people.filter((p) => members.includes(p.id));
@@ -323,7 +326,7 @@ function TeamForm({
         setBusy(true);
         setError('');
         try {
-          await onSubmit({ name, members, size, makeup: size ? makeup : {} });
+          await onSubmit({ name, members, size, makeup: size ? makeup : {}, closed });
         } catch (err) {
           setError(err instanceof Error ? err.message : String(err));
         } finally {
@@ -376,6 +379,18 @@ function TeamForm({
           })}
         </ul>
         {people.length === 0 && <p className="empty">No one has answered yet.</p>}
+      </fieldset>
+      <fieldset className="field">
+        <legend>Who can sign up?</legend>
+        <label className="check">
+          <input type="checkbox" checked={closed} onChange={(e) => setClosed(e.target.checked)} />
+          <span>Team only</span>
+        </label>
+        <p className="hint">
+          {closed
+            ? 'Only the people on the team can sign up for its raids and events: a closed run.'
+            : 'The team is seated first; anyone else in the guild can sign up for the seats left.'}
+        </p>
       </fieldset>
       {error && (
         <p className="error" role="alert">

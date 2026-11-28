@@ -45,10 +45,46 @@ await discord('PUT', `applications/${app.id}/commands`, [
         description: 'Post a poll’s raids in this channel',
         options: [{ type: 3, name: 'code', description: 'The code from the poll’s organizer tab', required: true }],
       },
+      {
+        type: 1,
+        name: 'event',
+        description: 'Make a one-off event, such as a pug night, with its own sign-up post',
+        options: [
+          { type: 3, name: 'name', description: 'Such as “Pug night” or “Onyxia attunement”', required: true, max_length: 40 },
+          { type: 3, name: 'date', description: 'Server time: “sat”, “tomorrow”, “Dec 12” or “2026-12-12”', required: true },
+          { type: 3, name: 'time', description: 'Server time: “8pm” or “20:00”', required: true },
+          {
+            type: 4,
+            name: 'length',
+            description: 'How long it runs (the poll’s raid length if left out)',
+            choices: [
+              ['1 hour', 60],
+              ['1½ hours', 90],
+              ['2 hours', 120],
+              ['2½ hours', 150],
+              ['3 hours', 180],
+              ['4 hours', 240],
+            ].map(([name, value]) => ({ name, value })),
+          },
+          {
+            type: 4,
+            name: 'size',
+            description: 'How many it holds (the poll’s raid size if left out)',
+            choices: [
+              { name: '10', value: 10 },
+              { name: '20', value: 20 },
+              { name: '40', value: 40 },
+              { name: 'any number', value: 0 },
+            ],
+          },
+          { type: 3, name: 'team', description: 'A team’s name, to seat its people first (or only them, if team only)' },
+          { type: 3, name: 'note', description: 'Anything to bring or know', max_length: 200 },
+        ],
+      },
     ],
   },
 ]);
-console.log('registered /muster connect');
+console.log('registered /muster connect and /muster event');
 
 if (process.argv.includes('--endpoint')) {
   await discord('PATCH', 'applications/@me', { interactions_endpoint_url: endpoint });

@@ -12,17 +12,19 @@ export interface Team {
   members: string[];
   size: number;
   makeup: Record<string, number>;
+  /** Team only: only its members can sign up for its raids and events. Otherwise the guild fills any seats left. */
+  closed: boolean;
   /** The team's locked-in raid, or null while it's still finding one. */
   raid: Raid | null;
 }
 
 export const TEAM_LIMITS = { name: 40, teams: 12 } as const;
 
-/** Name, members (only people in the poll), size and make-up; the raid is set on its own. */
+/** Name, members (only people in the poll), size, make-up and team only; the raid is set on its own. */
 export function validateTeam(
   input: unknown,
   personIds: ReadonlySet<string>,
-): Result<Pick<Team, 'name' | 'members' | 'size' | 'makeup'>> {
+): Result<Pick<Team, 'name' | 'members' | 'size' | 'makeup' | 'closed'>> {
   if (!input || typeof input !== 'object') return { ok: false, error: 'Missing the team’s details.' };
   const raw = input as Record<string, unknown>;
   const name = typeof raw.name === 'string' ? raw.name.replace(/\s+/g, ' ').trim().slice(0, TEAM_LIMITS.name) : '';
@@ -31,7 +33,7 @@ export function validateTeam(
   const members = [...new Set(given.filter((id): id is string => typeof id === 'string' && personIds.has(id)))];
   const raid = validateRaidSize(raw.size, raw.makeup);
   if (!raid.ok) return raid;
-  return { ok: true, value: { name, members, ...raid.value } };
+  return { ok: true, value: { name, members, ...raid.value, closed: raw.closed === true } };
 }
 
 /** Two raids that overlap: on the same night (or date) at overlapping times. */

@@ -70,7 +70,8 @@ It needs two more Worker secrets, and the command registered once:
 ```sh
 # The bot's token: Discord Developer Portal → muster → Bot → Reset Token. Keep it in the Keychain.
 security find-generic-password -a "$USER" -s DISCORD_BOT_TOKEN -w | tr -d '\n' | npx wrangler secret put DISCORD_BOT_TOKEN
-# Prints the app's public key (not secret) and registers /muster connect.
+# Prints the app's public key (not secret) and registers /muster connect and /muster event. Run it again
+# whenever the commands change.
 DISCORD_BOT_TOKEN="$(security find-generic-password -a "$USER" -s DISCORD_BOT_TOKEN -w)" node scripts/discord-setup.mjs
 echo <the printed key> | npx wrangler secret put DISCORD_PUBLIC_KEY
 # Once the Worker with the key is deployed: Discord checks the address with a signed PING.
@@ -78,7 +79,10 @@ DISCORD_BOT_TOKEN="$(security find-generic-password -a "$USER" -s DISCORD_BOT_TO
 ```
 
 Without the token the bot stays quiet and the organizer tab says it isn't set up; the preview Worker has
-none. A guild adds the bot and connects a channel from a poll's organizer tab.
+none. A guild adds the bot and connects a channel from a poll's organizer tab. Each Discord server also has
+a small Durable Object (`GuildObject`, migration v2) saying which poll each of its channels posts for, so
+`/muster event` typed in a channel finds its poll. A channel connected before `GuildObject` existed isn't
+in it until it's connected again with `/muster connect`.
 
 ## Checking
 

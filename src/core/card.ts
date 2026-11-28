@@ -1,6 +1,7 @@
-import type { Person, PollSettings } from './types';
+import type { Alt, Person, PollSettings } from './types';
 import type { Raid, RaidNight } from './raid';
-import { type EventSignups, type Roster, LATE_STEPS, roster } from './signup';
+import { type EventSignups, type Roster, type Seats, type Signup, LATE_STEPS, playing, roster } from './signup';
+import { classLabel, specsFor } from './classes';
 import { MINUTE } from './time';
 import { formatRange } from './format';
 
@@ -29,14 +30,29 @@ const STYLE = { primary: 1, secondary: 2, success: 3, danger: 4, link: 5 } as co
 const LAMP = 0xf2c46d;
 const DIM = 0x5b6170;
 
-export type Press = 'in' | 'late' | 'tentative' | 'out' | `late${number}`;
+/**
+ * What a button does: sign up (in, late, tentative, out); late by so many minutes; ask which spec, then
+ * play the class's nth spec or the usual ones; ask which character, then play an alt (by id) or the main.
+ */
+export type Press =
+  | 'in'
+  | 'late'
+  | 'tentative'
+  | 'out'
+  | `late${number}`
+  | 'spec'
+  | `spec${number}`
+  | 'usual'
+  | 'alt'
+  | `alt${string}`
+  | 'main';
 
 export function customId(poll: string, owner: string, night: string, press: Press): string {
   return `m:${poll}:${owner}:${night}:${press}`;
 }
 
 export function parseCustomId(id: string): { poll: string; owner: string; night: string; press: Press } | null {
-  const m = id.match(/^m:([a-z0-9]{8}):([a-z0-9]{4,8}):(\d{4}-\d{2}-\d{2}):(in|late|tentative|out|late\d{1,2})$/);
+  const m = id.match(/^m:([a-z0-9]{8}):([a-z0-9]{4,8}):(\d{4}-\d{2}-\d{2}):(in|late|tentative|out|late\d{1,2}|spec|spec\d|usual|alt|alt[a-z0-9]{4}|main)$/);
   if (!m) return null;
   const press = m[4] as Press;
   if (press.startsWith('late') && press !== 'late' && !LATE_STEPS.includes(Number(press.slice(4)))) return null;
@@ -51,10 +67,13 @@ export function plain(text: string): string {
 const ROLE_LABEL: Record<string, string> = { tank: 'Tanks', healer: 'Healers', dps: 'DPS' };
 const label = (role: string) => ROLE_LABEL[role] ?? role.charAt(0).toUpperCase() + role.slice(1);
 
-function who(p: Person | undefined, extra = ''): string {
+/** "Faye · priest", "Alty (Faye) · holy paladin": an alt says whose it is, and a spec for the night shows. */
+function who(p: Person | undefined, signup: Signup | undefined, roles: string[], extra = ''): string {
   if (!p) return '?';
-  const cls = p.cls ? ` ${p.cls}` : '';
-  return `${plain(p.name)}${cls ? ` ·${cls}` : ''}${extra}`;
+  const now = playing(p, signup, roles);
+  const name = now.alt ? `${plain(now.name)} (${plain(p.name)})` : plain(p.name);
+  const cls = now.changed ? classLabel(now.cls, now.specs) : now.cls;
+  return `${name}${cls ? ` · ${cls}` : ''}${extra}`;
 }
 
 /** A list for one field, kept under Discord's 1024 characters. */
@@ -70,10 +89,14 @@ function list(lines: string[]): string {
 }
 
 export interface CardInput {
-  poll: Pick<PollSettings, 'title' | 'tz' | 'realm' | 'size' | 'makeup' | 'slot'> & { id: string };
+  poll: Pick<PollSettings, 'title' | 'tz' | 'realm' | 'size' | 'makeup' | 'slot' | 'roles' | 'mode'> & { id: string };
   people: Person[];
-  /** The team whose raid this is, or null for the poll's own. */
-  team: { id: string; name: string; members: string[]; size: number; makeup: Record<string, number> } | null;
+  /** The team or event whose raid this is, or null for the poll's own. */
+  team: (Seats & { id: string; name: string }) | null;
+  /** Lines under the time, such as who an event is for and its note. */
+  detail?: string[];
+  /** The title it was posted with, for a card whose raid or event is gone. */
+  title?: string;
   raid: Pick<Raid, 'start' | 'minutes'>;
   night: RaidNight;
   event: EventSignups | undefined;
@@ -96,13 +119,14 @@ export function raidCard(input: CardInput): DiscordMessage {
   const e = Math.floor(night.end / 1000);
   const server = poll.realm ? ` · ${formatRange(night.start, night.end, poll.realm, true)} server time` : '';
   const lines = [`<t:${s}:F> – <t:${e}:t> (<t:${s}:R>)${server}`];
-  if (team && poll.title !== team.name) lines.push(plain(poll.title));
+  if (input.detail) lines.push(...input.detail.map((d) => plain(d)).filter((d) => d !== '?'));
+  else if (team && poll.title !== team.name) lines.push(plain(poll.title));
 
   if (input.gone) {
     return {
       embeds: [
         {
-          title: `${input.gone === 'off' ? 'Called off' : 'Moved'}: ${cardTitle(input)}`,
+          title: `${input.gone === 'off' ? 'Called off' : 'Moved'}: ${input.title ?? cardTitle(input)}`,
           description: `~~${lines[0]}~~\n${input.gone === 'off' ? 'This night is off.' : 'This raid has a new time: see muster.'}`,
           color: DIM,
           url,
@@ -123,12 +147,16 @@ export function raidCard(input: CardInput): DiscordMessage {
     const want = r.seating.want[role];
     fields.push({
       name: `${label(role || 'seated')} ${want !== undefined ? `${seated.length}/${want}` : seated.length}`,
-      value: list(seated.map((x) => who(byId.get(x.id), lateNote(x.id)))),
+      value: list(seated.map((x) => who(byId.get(x.id), signups[x.id], poll.roles, lateNote(x.id)))),
       inline: true,
     });
   }
-  if (r.standby.length) fields.push({ name: `Standby ${r.standby.length}`, value: list(r.standby.map((id) => who(byId.get(id), lateNote(id)))) });
-  if (r.tentative.length) fields.push({ name: `Maybe ${r.tentative.length}`, value: list(r.tentative.map((id) => who(byId.get(id)))) });
+  if (r.standby.length) {
+    fields.push({ name: `Standby ${r.standby.length}`, value: list(r.standby.map((id) => who(byId.get(id), signups[id], poll.roles, lateNote(id)))) });
+  }
+  if (r.tentative.length) {
+    fields.push({ name: `Maybe ${r.tentative.length}`, value: list(r.tentative.map((id) => who(byId.get(id), signups[id], poll.roles))) });
+  }
   if (r.out.length) fields.push({ name: `Out ${r.out.length}`, value: list(r.out.map((id) => plain(byId.get(id)?.name ?? '?'))) });
 
   const size = team ? team.size : poll.size;
@@ -158,6 +186,57 @@ export function raidCard(input: CardInput): DiscordMessage {
           { type: BUTTON, style: STYLE.secondary, label: 'maybe', custom_id: id('tentative') },
           { type: BUTTON, style: STYLE.danger, label: 'out', custom_id: id('out') },
           { type: BUTTON, style: STYLE.link, label: 'muster', url },
+        ],
+      },
+      {
+        type: ROW,
+        components: [
+          { type: BUTTON, style: STYLE.secondary, label: 'change spec', custom_id: id('spec') },
+          { type: BUTTON, style: STYLE.secondary, label: 'on my alt', custom_id: id('alt') },
+        ],
+      },
+    ],
+  };
+}
+
+/** "Which spec?", for one night: the character's class's specs, and back to their usual ones. */
+export function specAsk(poll: string, owner: string, night: string, cls: string, current: string[] | undefined): DiscordMessage {
+  return {
+    flags: EPHEMERAL,
+    content: `Which spec this night, on your ${cls}?`,
+    components: [
+      {
+        type: ROW,
+        components: [
+          ...specsFor(cls).map((spec, i) => ({
+            type: BUTTON,
+            style: current?.length === 1 && current[0] === spec ? STYLE.success : STYLE.primary,
+            label: spec,
+            custom_id: customId(poll, owner, night, `spec${i}`),
+          })),
+          { type: BUTTON, style: current?.length ? STYLE.secondary : STYLE.success, label: 'my usual', custom_id: customId(poll, owner, night, 'usual') },
+        ],
+      },
+    ],
+  };
+}
+
+/** "Which character?": their alts and their main. */
+export function altAsk(poll: string, owner: string, night: string, main: string, alts: Alt[], current: string | undefined): DiscordMessage {
+  return {
+    flags: EPHEMERAL,
+    content: 'Which character this night?',
+    components: [
+      {
+        type: ROW,
+        components: [
+          ...alts.map((a) => ({
+            type: BUTTON,
+            style: current === a.id ? STYLE.success : STYLE.primary,
+            label: `${a.name} · ${a.cls || 'alt'}`.slice(0, 80),
+            custom_id: customId(poll, owner, night, `alt${a.id}`),
+          })),
+          { type: BUTTON, style: current ? STYLE.secondary : STYLE.success, label: `${main} (main)`.slice(0, 80), custom_id: customId(poll, owner, night, 'main') },
         ],
       },
     ],

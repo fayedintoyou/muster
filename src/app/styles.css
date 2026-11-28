@@ -666,6 +666,13 @@ option { background: var(--wall); color: var(--ink); }
   overflow-wrap: anywhere;
 }
 .my-level { margin: 0.9rem 0 0; }
+.my-alts { margin-top: 1.1rem; display: grid; gap: 0.5rem; justify-items: start; }
+.my-alts > .muted { margin: 0; font-size: 0.875rem; }
+.my-alts .hint { margin-left: 0.4rem; }
+.alt-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.3rem; }
+.alt-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 0.75rem; }
+.alt-form { display: grid; gap: 0.25rem; padding: 0.75rem 0.9rem; border: 1px solid var(--line); border-radius: 8px; width: 100%; box-sizing: border-box; }
+.alt-form .field > span { font-size: 0.875rem; }
 .levelling { color: var(--moon); font-size: 0.8125rem; }
 .my-note { display: grid; gap: 0.35rem; margin-top: 0.9rem; max-width: 30rem; }
 .my-note .muted { font-size: 0.875rem; }
@@ -1093,6 +1100,7 @@ button.row-head:hover { color: var(--lamp); }
 
 /* Raid teams, picked from everyone who answered. */
 .panels[data-tab='teams'] { display: none; }
+.panels[data-tab='events'] { display: none; }
 .teams { display: grid; gap: 2rem; max-width: 44rem; }
 .team { padding-top: 1.2rem; border-top: 1px solid var(--line); }
 .team-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.4rem 1rem; }
@@ -1101,6 +1109,8 @@ button.row-head:hover { color: var(--lamp); }
 .team-roster { list-style: none; margin: 0.6rem 0 0; padding: 0; display: grid; gap: 0.3rem; }
 .team-roster li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 0.75rem; }
 .team-clash { margin-top: 0.8rem; }
+.team-only { color: var(--lamp); }
+.signup-playing { max-width: 100%; }
 .team-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1rem; margin-top: 1rem; }
 .team-best { margin-top: 1.25rem; }
 .team .raid-banner { margin-top: 1rem; }
@@ -1118,7 +1128,7 @@ button.row-head:hover { color: var(--lamp); }
 .signup { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; vertical-align: middle; }
 .segmented.small button { min-height: 1.9rem; padding: 0.15rem 0.7rem; font-size: 0.75rem; }
 .signup .segmented button[aria-pressed='true'] { background: var(--lamp); color: var(--night); font-weight: 500; }
-.signup select { width: auto; min-width: 8rem; min-height: 1.9rem; padding: 0.1rem 0.4rem; font-size: 0.8125rem; }
+.signup select { width: auto; min-width: 8rem; min-height: 1.9rem; padding: 0.1rem 1.7rem 0.1rem 0.4rem; text-overflow: ellipsis; font-size: 0.8125rem; }
 .raid-line .signup { margin-left: 0.25rem; }
 
 .event { margin-top: 1rem; display: grid; gap: 0.6rem; max-width: 46rem; }
