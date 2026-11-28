@@ -88,6 +88,12 @@ link to @ people and match their button presses to their answers.
 
 These are what has to work before the guild can stop using Raid-Helper.
 
+**Status (PR #35, the bot):** 1, 2 (in Discord: in, late with how late, maybe, out; not yet "change spec" or
+"on my alt"), 3 (the card's roster, and a private message to whoever an organizer seats or benches),
+4, 5, 6 (the post is edited and everyone signed up is pinged; calendars follow the `.ics`'s version) and 7
+(Discord's own command permissions decide who can connect a channel; officers organize on the page) are
+built. 8 is PR #34. Still to do from this list: change spec and alts.
+
 1. **A raid post in Discord.** The bot posts the raid with its date, the times in Discord timestamps and
    server time, the roster so far, and buttons: **in**, **late**, **tentative**, **out**. It's one card,
    which the bot edits as people sign up, so the channel isn't flooded with new posts.

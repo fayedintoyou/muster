@@ -4,6 +4,7 @@ import type { Team } from '../core/team';
 import type { Move, SignupStatus } from '../core/signup';
 import type { Absence } from '../core/absence';
 import type { GroupMove } from '../core/groups';
+import type { BotLink, BotSettings } from '../core/bot';
 
 export class ApiError extends Error {
   constructor(
@@ -201,6 +202,22 @@ export const api = {
       ...auth,
       body: JSON.stringify({ absences }),
     });
+  },
+  /** Where the bot posts, the guild's choices, the server's roles, and how to add the bot. */
+  bot(id: string, admin: string) {
+    return call<{ link: BotLink | null; problem: string | null; roles: { id: string; name: string }[]; ready: boolean; invite: string }>(
+      `/api/polls/${id}/bot`,
+      { admin },
+    );
+  },
+  botCode(id: string, admin: string) {
+    return call<{ code: string }>(`/api/polls/${id}/bot/code`, { method: 'POST', admin });
+  },
+  botSettings(id: string, admin: string, settings: Partial<BotSettings>) {
+    return call<{ link: BotLink }>(`/api/polls/${id}/bot`, { method: 'PUT', admin, body: JSON.stringify(settings) });
+  },
+  botDisconnect(id: string, admin: string) {
+    return call<{ ok: true }>(`/api/polls/${id}/bot`, { method: 'DELETE', admin });
   },
   remove(id: string, personId: string, auth: { token?: string; admin?: string }) {
     return call<{ version: number }>(`/api/polls/${id}/people/${personId}`, { method: 'DELETE', ...auth });
