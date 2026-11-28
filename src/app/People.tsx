@@ -1,9 +1,12 @@
 import { useState } from 'react';
 import type { Person } from '../core/types';
+import { formatDuration } from '../core/format';
 import { ClassName } from './ClassPicker';
 
 // Who's answered. Untick someone to leave them out of the glow and the best times (a bench, an alt);
 // mark someone "must come" (the raid leader, the only tank) and best times only offers windows with them.
+// Once you've answered, each person says how long they're free when you are, and "show" traces their
+// times on the grid (pointing at a row does the same on a desktop).
 
 export function People({
   people,
@@ -13,6 +16,9 @@ export function People({
   onExclude,
   onRequire,
   onHighlight,
+  pinned,
+  onPin,
+  withYou,
   canRemove,
   onRemove,
 }: {
@@ -23,6 +29,10 @@ export function People({
   onExclude: (id: string, out: boolean) => void;
   onRequire: (id: string, must: boolean) => void;
   onHighlight: (id: string | null) => void;
+  pinned: string | null;
+  onPin: (id: string | null) => void;
+  /** Minutes each other person is free when you are, once you've answered. */
+  withYou?: ReadonlyMap<string, number>;
   canRemove: (id: string) => boolean;
   onRemove: (id: string) => Promise<void>;
 }) {
@@ -40,6 +50,7 @@ export function People({
           const marked = Object.keys(p.marks).length;
           const out = excluded.has(p.id);
           const must = required.has(p.id);
+          const shared = p.id === meId || marked === 0 ? undefined : withYou?.get(p.id);
           return (
             <li
               key={p.id}
@@ -59,9 +70,26 @@ export function People({
                 <ClassName cls={p.cls} specs={p.specs} spec={p.spec} />
                 {p.level60 === false && <span className="levelling">levelling</span>}
                 {marked === 0 && <span className="muted">no times yet</span>}
+                {shared !== undefined && (
+                  <span className="with-you" data-none={shared === 0 || undefined}>
+                    {shared === 0 ? 'never free when you are' : `${formatDuration(shared)} with you`}
+                  </span>
+                )}
               </span>
               {p.note && <p className="person-note">{p.note}</p>}
               <span className="person-actions">
+                {marked > 0 && (
+                  <button
+                    type="button"
+                    className="toggle"
+                    aria-pressed={pinned === p.id}
+                    onClick={() => onPin(pinned === p.id ? null : p.id)}
+                    title={`Trace ${p.id === meId ? 'your' : `${p.name}’s`} times on the grid`}
+                    aria-label={`show ${p.id === meId ? 'your' : `${p.name}’s`} times`}
+                  >
+                    show
+                  </button>
+                )}
                 <button
                   type="button"
                   className="toggle"

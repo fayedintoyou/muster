@@ -514,6 +514,44 @@ try {
   assert.equal(await p1.locator('.composition').innerText(), 'Of the 4: 2 priests, 1 paladin, 1 mage', 'everyone shows the class makeup');
   await shot(p1, '05-everyone-phone');
 
+  // ---- Yourself against everyone: how long each person is free when you are, and tracing times ----
+  const asked = await fetch(`${BASE}/api/polls/${pollId}`).then((r) => r.json());
+  const faye = asked.people.find((p) => p.name === 'Faye');
+  const hours = (m) => (m % 60 ? `${Math.floor(m / 60)}h ${m % 60}m`.replace(/^0h /, '') : `${m / 60}h`);
+  const others = asked.people.filter((p) => p.id !== faye.id && Object.keys(p.marks).length > 0);
+  const sharedWith = Object.fromEntries(
+    others.map((p) => [p.name, Object.keys(faye.marks).filter((k) => p.marks[k]).length * asked.poll.slot]),
+  );
+  assert.ok(Object.values(sharedWith).some((m) => m > 0), 'someone shares time with Faye');
+  for (const [name, minutes] of Object.entries(sharedWith)) {
+    assert.equal(
+      await p1.locator('.people-list li', { hasText: name }).locator('.with-you').innerText(),
+      minutes === 0 ? 'never free when you are' : `${hours(minutes)} with you`,
+      `${name} says how long they're free when Faye is`,
+    );
+  }
+  assert.equal(await p1.locator('.people-list li', { hasText: 'Faye' }).locator('.with-you').count(), 0, 'not shown against yourself');
+  const hintHeight = (await p1.locator('.group-hint').boundingBox()).height;
+  await tap(p1, cdp, '.legend .toggle:text("my times")');
+  assert.equal(await p1.locator('.legend .toggle').getAttribute('aria-pressed'), 'true');
+  assert.equal(await p1.locator('.group-hint').innerText(), 'Outlined: when you’re free.');
+  assert.equal(await p1.locator('.heat .cell[data-outline="2"]').count(), 12, 'my times traces your available slots');
+  assert.equal(await p1.locator('.heat .cell[data-outline="1"]').count(), 1, 'and your if-needed one');
+  const boAnswers = asked.people.find((p) => p.name === 'Bo');
+  await tap(p1, cdp, '.people-list li:has-text("Bo") .toggle:text("show")');
+  assert.equal(await p1.locator('.legend .toggle').getAttribute('aria-pressed'), 'false', 'showing someone else lets go of yours');
+  assert.equal(
+    await p1.locator('.group-hint').innerText(),
+    `Outlined: when Bo is free, ${hours(sharedWith.Bo)} of it with you.`,
+    'a tap pins someone’s times, on a phone too',
+  );
+  assert.equal(await p1.locator('.heat .cell[data-outline="2"]').count(), Object.keys(boAnswers.marks).length, 'Bo’s times are traced');
+  assert.equal((await p1.locator('.group-hint').boundingBox()).height, hintHeight, 'the hint keeps to one line, so the grid holds still');
+  await shot(p1, '05b-with-you-phone');
+  await tap(p1, cdp, '.people-list li:has-text("Bo") .toggle:text("show")');
+  assert.equal(await p1.locator('.heat .cell[data-outline]').count(), 0, 'a second tap lets go');
+  assert.equal(await p1.locator('.group-hint').innerText(), 'Tap a window to see who’s free.');
+
   await p1.click('.tabs button:text("best times")');
   await p1.waitForSelector('.best-item');
   const top = await p1.locator('.best-item').first().innerText();
