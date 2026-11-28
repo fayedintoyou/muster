@@ -657,6 +657,73 @@ try {
   await t10Maker.locator('.event-roster :text("Faye")').waitFor();
   await shot(p2, '06f-signups-desk');
 
+  // ---- Groups: the maker splits the night into groups of five, and everyone sees them ----
+  const groups = t10Maker.locator('.groups');
+  assert.equal(await groups.locator('.group').count(), 2, 'a 10 makes two groups');
+  assert.match(await groups.locator('.groups-unplaced').innerText(), /Faye[\s\S]*Bo|Bo[\s\S]*Faye/, 'everyone seated starts unplaced');
+  // On the phone: tap Bo, then a free place in group 1.
+  await groups.locator('.groups-unplaced .group-person', { hasText: 'Bo' }).tap();
+  await groups.locator('.group[data-group="1"] button.group-free').tap();
+  await groups.locator('.group[data-group="1"] .group-person', { hasText: 'Bo' }).waitFor();
+  assert.equal(await groups.locator('.group[data-group="1"] .group-hints').innerText(), 'priest', 'a group with a priest says so');
+  assert.match(await groups.locator('.group[data-group="1"] .group-meta').innerText(), /^priest · healer$/, 'with each person’s class and role');
+  // Dragged with a mouse: Faye into group 2.
+  await groups.locator('.groups-unplaced .group-person', { hasText: 'Faye' }).dragTo(groups.locator('.group[data-group="2"]'));
+  await groups.locator('.group[data-group="2"] .group-person', { hasText: 'Faye' }).waitFor();
+  assert.equal(await groups.locator('.groups-unplaced').count(), 0, 'no one is left unplaced');
+  assert.equal(await groups.locator('.group[data-group="2"] .group-hints').innerText(), 'aura', 'a paladin brings an aura');
+  // Tap one, then the other, to swap them.
+  await groups.locator('.group-person', { hasText: 'Bo' }).tap();
+  await groups.locator('.group-person', { hasText: 'Faye' }).tap();
+  await groups.locator('.group[data-group="1"] .group-person', { hasText: 'Faye' }).waitFor();
+  assert.match(await groups.locator('.group[data-group="2"]').innerText(), /Bo/, 'tapping two people swaps them');
+  await shot(p1, '06g-groups-phone');
+  // The Worker holds the rules: only people seated that night go in groups.
+  const adminToken = await p1.evaluate((id) => JSON.parse(localStorage.getItem(`muster:poll:${id}`)).admin, pollId);
+  const before = await fetch(`${BASE}/api/polls/${pollId}`).then((r) => r.json());
+  const t10Team = before.teams.find((t) => t.name === 'Thursday 10');
+  const idOf = (name) => before.people.find((p) => p.name === name).id;
+  const firstNight = Object.keys(before.groups).find((k) => k.startsWith(`${t10Team.id}/`)).split('/')[1];
+  const asAdmin = { 'content-type': 'application/json', 'x-admin-token': adminToken };
+  const notSeated = await fetch(`${BASE}/api/polls/${pollId}/groups/${t10Team.id}/${firstNight}/${idOf('Dee')}`, {
+    method: 'PUT',
+    headers: asAdmin,
+    body: JSON.stringify({ group: 1 }),
+  });
+  assert.equal(notSeated.status, 409, 'someone not seated can’t be put in a group');
+  // Bo, on a desktop, sees the groups and can't change them.
+  await p2.reload();
+  await p2.click('.tabs button:text("teams")');
+  const boGroups = p2.locator('.team[aria-label="Thursday 10"] .groups');
+  await boGroups.waitFor();
+  assert.match(await boGroups.locator('.group[data-group="1"]').innerText(), /Faye/, 'another browser sees the groups');
+  assert.match(await boGroups.locator('.group[data-group="2"]').innerText(), /Bo \(you\)/);
+  assert.equal(await boGroups.locator('button').count(), 0, 'and only the maker arranges them');
+  await shot(p2, '06h-groups-desk');
+
+  // ---- A template: this night's groups, laid over the next night ----
+  await groups.locator('button:text("save as template")').tap();
+  await groups.locator(':text("matches the template")').waitFor();
+  // Next week Cy comes and Bo doesn't.
+  const nextNight = new Date(Date.parse(`${firstNight}T12:00:00Z`) + 7 * 86_400_000).toISOString().slice(0, 10);
+  const cyIn = await fetch(`${BASE}/api/polls/${pollId}/signups/${t10Team.id}/${nextNight}/${idOf('Cy')}`, {
+    method: 'PUT',
+    headers: asAdmin,
+    body: JSON.stringify({ status: 'in' }),
+  });
+  assert.equal(cyIn.status, 200, 'the organizer signs Cy up for the next night');
+  await p1.reload();
+  await p1.click('.tabs button:text("teams")');
+  await t10Maker.locator('.event-nights button').nth(1).tap();
+  await t10Maker.locator('.event-me button:text-is("in")').tap();
+  await t10Maker.locator('.event-roster :text("Faye")').waitFor();
+  assert.match(await groups.locator('.groups-unplaced').innerText(), /Faye[\s\S]*Cy|Cy[\s\S]*Faye/, 'a new night starts unplaced');
+  await groups.locator('button:text("use the template")').tap();
+  await groups.locator('.group[data-group="1"] .group-person', { hasText: 'Faye' }).waitFor();
+  assert.equal(await groups.locator('.group[data-group="2"] .group-person').count(), 0, 'Bo, not coming, is left out');
+  assert.match(await groups.locator('.groups-unplaced').innerText(), /Cy/, 'and Cy, new, is unplaced');
+  await shot(p1, '06i-groups-template-phone');
+
   // ---- Dated absences: Bo is away for the next four weeks, so every night counts him out ----
   const nyDate = (days) => {
     const d = new Date(Date.now() + days * 86_400_000);

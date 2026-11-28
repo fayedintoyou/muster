@@ -2,7 +2,8 @@ import { DurableObject } from 'cloudflare:workers';
 import type { Person, Poll, PollSettings, PollState } from '../src/core/types';
 import { slotKeys } from '../src/core/slots';
 import { type Raid, raidNights, validateRaid } from '../src/core/raid';
-import { type EventSignups, POLL_RAID, eventKey, nextSignup, validateSignup } from '../src/core/signup';
+import { type EventSignups, POLL_RAID, eventKey, nextSignup, roster, validateSignup } from '../src/core/signup';
+import { type Groups, arrange, groupCount, moveInGroups, validateGroupMove } from '../src/core/groups';
 import { addDays, dateKey, today } from '../src/core/time';
 import { type Absence, currentAbsences, validateAbsences } from '../src/core/absence';
 import { TEAM_LIMITS, type Team, validateTeam } from '../src/core/team';
@@ -22,7 +23,8 @@ import {
 import { hashPassword, randomId, randomToken, sameHash, sha256 } from './crypto';
 
 // One object per poll. Its storage holds the poll ('poll'), the admin token's hash ('admin'), a version
-// that every change bumps ('version'), and one record per person ('p:<id>').
+// that every change bumps ('version'), and one record per person ('p:<id>'). Each raid night keeps its
+// sign-ups ('s:<event>') and groups ('g:<event>'); each raid's group template sits in 'layouts'.
 //
 // Every read-modify-write below runs without an await between the read and the write (the synchronous
 // KV API), so two people saving at once can't lose each other's answers. Hashing happens before.
@@ -174,6 +176,31 @@ export class PollObject extends DurableObject<Env> {
     return out;
   }
 
+  /** Groups for nights from yesterday on, by event key, as the organizer last left them. */
+  private groups(tz: string): Record<string, Groups> {
+    const from = dateKey(addDays(today(tz), -1));
+    const out: Record<string, Groups> = {};
+    for (const [key, value] of this.kv.list<Groups>({ prefix: 'g:' })) {
+      const event = key.slice(2);
+      if (event.slice(event.indexOf('/') + 1) >= from) out[event] = value;
+    }
+    return out;
+  }
+
+  /** Who's seated tonight and how many groups they make, with the night's groups laid over them. */
+  private nightGroups(poll: Poll, owner: string, night: string, raid: Raid) {
+    const team = owner === POLL_RAID ? null : (this.teams().find((t) => t.id === owner) ?? null);
+    const seated = roster(
+      this.people().map(publicPerson),
+      this.kv.get<EventSignups>(`s:${eventKey(owner, night)}`),
+      raid,
+      team,
+      poll,
+    ).seating.seated.map((s) => s.id);
+    const count = groupCount(team ? team.size : poll.size, seated.length);
+    return { seated, count, ...arrange(this.kv.get<Groups>(`g:${eventKey(owner, night)}`), seated, count) };
+  }
+
   /** The raid an event belongs to, and that the night is one of its coming nights that's on. */
   private eventRaid(poll: Poll, owner: string, night: string): Raid | Failure {
     const raid = owner === POLL_RAID ? this.kv.get<Raid>('raid') : this.teams().find((t) => t.id === owner)?.raid;
@@ -199,6 +226,8 @@ export class PollObject extends DurableObject<Env> {
       raid: this.kv.get<Raid>('raid') ?? null,
       teams: this.teams(),
       signups: this.signups(poll.tz),
+      groups: this.groups(poll.tz),
+      layouts: this.kv.get<Record<string, Groups>>('layouts') ?? {},
       officers: this.officers(),
       version: this.kv.get<number>('version') ?? 0,
     };
@@ -631,6 +660,8 @@ export class PollObject extends DurableObject<Env> {
     const teams = this.teams();
     if (!teams.some((t) => t.id === teamId)) return fail(404, 'That team doesn’t exist any more.');
     this.kv.put('teams', teams.filter((t) => t.id !== teamId));
+    const { [teamId]: _gone, ...layouts } = this.kv.get<Record<string, Groups>>('layouts') ?? {};
+    this.kv.put('layouts', layouts);
     this.bump();
     return { ok: true, state: this.state()! };
   }
@@ -746,6 +777,68 @@ export class PollObject extends DurableObject<Env> {
     else delete person.absences;
     this.kv.put(`p:${person.id}`, person);
     return { ok: true, absences: checked.value, version: this.bump() };
+  }
+
+  /** An organizer puts someone seated into a group, takes them out of one, or swaps two people. */
+  async moveToGroup(
+    admin: string | undefined,
+    owner: string,
+    night: string,
+    personId: string,
+    input: unknown,
+  ): Promise<Outcome<{ state: PollState }>> {
+    if (!(await this.adminOk(admin))) return fail(403, 'Only whoever made the poll can arrange groups.');
+    const poll = this.poll();
+    if (!poll) return fail(404, 'This poll doesn’t exist.');
+    const raid = this.eventRaid(poll, owner, night);
+    if ('ok' in raid) return raid;
+    const now = this.nightGroups(poll, owner, night, raid);
+    const move = validateGroupMove(input, now.count);
+    if (!move.ok) return fail(400, move.error);
+    if (!now.seated.includes(personId) || ('swap' in move.value && !now.seated.includes(move.value.swap))) {
+      return fail(409, 'Only people seated that night go in groups.');
+    }
+    const next = moveInGroups(now.groups, personId, move.value);
+    if (!next.ok) return fail(409, next.error);
+    this.kv.put(`g:${eventKey(owner, night)}`, next.value);
+    this.bump();
+    return { ok: true, state: this.state()! };
+  }
+
+  /** Lays the raid's saved template over one night (`template: true`), or with null clears its groups. */
+  async setGroups(admin: string | undefined, owner: string, night: string, input: unknown): Promise<Outcome<{ state: PollState }>> {
+    if (!(await this.adminOk(admin))) return fail(403, 'Only whoever made the poll can arrange groups.');
+    const poll = this.poll();
+    if (!poll) return fail(404, 'This poll doesn’t exist.');
+    const raid = this.eventRaid(poll, owner, night);
+    if ('ok' in raid) return raid;
+    const key = `g:${eventKey(owner, night)}`;
+    if (input === null) {
+      this.kv.delete(key);
+    } else {
+      if ((input as { template?: unknown } | undefined)?.template !== true) return fail(400, 'Use the template, or clear the groups.');
+      const layout = this.kv.get<Record<string, Groups>>('layouts')?.[owner];
+      if (!layout) return fail(404, 'There’s no saved template for this raid yet.');
+      const now = this.nightGroups(poll, owner, night, raid);
+      this.kv.put(key, arrange(layout, now.seated, now.count).groups);
+    }
+    this.bump();
+    return { ok: true, state: this.state()! };
+  }
+
+  /** Saves one night's groups as the raid's template, for laying over its other nights. */
+  async saveLayout(admin: string | undefined, owner: string, night: unknown): Promise<Outcome<{ state: PollState }>> {
+    if (!(await this.adminOk(admin))) return fail(403, 'Only whoever made the poll can arrange groups.');
+    const poll = this.poll();
+    if (!poll) return fail(404, 'This poll doesn’t exist.');
+    if (typeof night !== 'string') return fail(400, 'Pick a night.');
+    const raid = this.eventRaid(poll, owner, night);
+    if ('ok' in raid) return raid;
+    const { groups } = this.nightGroups(poll, owner, night, raid);
+    if (groups.every((g) => g.length === 0)) return fail(409, 'Put someone in a group first.');
+    this.kv.put('layouts', { ...this.kv.get<Record<string, Groups>>('layouts'), [owner]: groups });
+    this.bump();
+    return { ok: true, state: this.state()! };
   }
 
   async destroy(admin: string | undefined): Promise<Outcome<object>> {

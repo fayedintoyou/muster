@@ -11,6 +11,7 @@ import { raidCalendar, raidNights, validateRaid } from './raid';
 import { raidsClash, teamClashes, validateTeam } from './team';
 import { nextSignup, roster, usuallyFree, validateSignup } from './signup';
 import { awayOn, currentAbsences, spanDays, validateAbsences } from './absence';
+import { arrange, groupCount, groupHints, moveInGroups, validateGroupMove } from './groups';
 import type { Person, PollSettings } from './types';
 
 const NY = 'America/New_York';
@@ -432,5 +433,58 @@ describe('dated absences', () => {
     const checked = validateAbsences([span('2027-01-05', '2027-01-06'), span('2026-11-01', '2026-11-30'), span('2026-11-30', '2026-12-01')], today);
     expect(checked.ok && checked.value.map((a) => a.from)).toEqual(['2026-11-30', '2027-01-05']);
     expect(currentAbsences([span('2026-11-01', '2026-11-30'), span('2026-12-01', '2026-12-01')], today)).toEqual([span('2026-12-01', '2026-12-01')]);
+  });
+});
+
+describe('groups', () => {
+  it('makes 8 groups for a 40, 4 for a 20, 2 for a 10, and enough for a raid of any size', () => {
+    expect([40, 20, 10].map((size) => groupCount(size, 3))).toEqual([8, 4, 2]);
+    expect(groupCount(0, 12)).toBe(3);
+    expect(groupCount(0, 0)).toBe(1);
+  });
+
+  it('keeps only tonight’s seated, once each and five to a group; the rest are unplaced', () => {
+    const stored = [['a', 'gone', 'b'], ['a', 'c', 'd', 'e', 'f', 'g', 'h'], ['past the last group']];
+    const { groups, unplaced } = arrange(stored, ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'new'], 2);
+    expect(groups).toEqual([['a', 'b'], ['c', 'd', 'e', 'f', 'g']]);
+    expect(unplaced).toEqual(['h', 'new']);
+  });
+
+  it('lays a template over another night: people missing are left out, new people unplaced', () => {
+    const template = [['tank', 'shaman', 'priest'], ['rogue', 'mage']];
+    expect(arrange(template, ['mage', 'priest', 'tank', 'newcomer'], 2)).toEqual({
+      groups: [['tank', 'priest'], ['mage']],
+      unplaced: ['newcomer'],
+    });
+  });
+
+  it('moves someone into a group, out of one, and won’t overfill one', () => {
+    const groups = [['a', 'b', 'c', 'd', 'e'], ['f']];
+    expect(moveInGroups(groups, 'f', { group: 0 })).toMatchObject({ ok: false });
+    expect(moveInGroups(groups, 'a', { group: 1 })).toEqual({ ok: true, value: [['b', 'c', 'd', 'e'], ['f', 'a']] });
+    expect(moveInGroups(groups, 'x', { group: 1 })).toEqual({ ok: true, value: [['a', 'b', 'c', 'd', 'e'], ['f', 'x']] });
+    expect(moveInGroups(groups, 'f', { group: null })).toEqual({ ok: true, value: [['a', 'b', 'c', 'd', 'e'], []] });
+    expect(groups).toEqual([['a', 'b', 'c', 'd', 'e'], ['f']]);
+  });
+
+  it('swaps two people, either of whom may be unplaced', () => {
+    const groups = [['a', 'b'], ['c']];
+    expect(moveInGroups(groups, 'a', { swap: 'c' })).toEqual({ ok: true, value: [['c', 'b'], ['a']] });
+    expect(moveInGroups(groups, 'x', { swap: 'b' })).toEqual({ ok: true, value: [['a', 'x'], ['c']] });
+    expect(moveInGroups(groups, 'c', { swap: 'x' })).toEqual({ ok: true, value: [['a', 'b'], ['x']] });
+  });
+
+  it('checks a move against the night’s groups', () => {
+    expect(validateGroupMove({ group: 7 }, 8)).toEqual({ ok: true, value: { group: 7 } });
+    expect(validateGroupMove({ group: 8 }, 8).ok).toBe(false);
+    expect(validateGroupMove({ group: 1.5 }, 8).ok).toBe(false);
+    expect(validateGroupMove({ group: null }, 8)).toEqual({ ok: true, value: { group: null } });
+    expect(validateGroupMove({ swap: 'abc' }, 8)).toEqual({ ok: true, value: { swap: 'abc' } });
+    expect(validateGroupMove('x', 8).ok).toBe(false);
+  });
+
+  it('hints at the group-only things a group has', () => {
+    expect(groupHints(['priest', 'warrior', 'shaman'])).toEqual(['totems', 'priest']);
+    expect(groupHints(['rogue', 'mage'])).toEqual([]);
   });
 });

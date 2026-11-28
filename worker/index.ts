@@ -92,6 +92,34 @@ async function api(request: Request, env: Env, url: URL): Promise<Response> {
     return result.ok ? json(result.state) : fromFailure(result);
   }
 
+  // /groups/<raid or team>/<night>[/<person>]: an organizer arranging a night's groups; /layouts/<raid or
+  // team>: saving one night's groups as that raid's template.
+  if ((parts[3] === 'groups' && (parts.length === 6 || parts.length === 7)) || (parts[3] === 'layouts' && parts.length === 5)) {
+    const [, , , kind, owner, night, personId] = parts;
+    if (
+      (owner !== POLL_RAID && !TEAM_ID.test(owner)) ||
+      (night !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(night)) ||
+      (personId !== undefined && !ID_PATTERN.test(personId))
+    ) {
+      return error(404, 'Not found.');
+    }
+    const admin = auth(request).admin;
+    if (method === 'DELETE' && kind === 'groups' && !personId) {
+      const result = await poll.setGroups(admin, owner, night, null);
+      return result.ok ? json(result.state) : fromFailure(result);
+    }
+    if (method !== 'PUT') return error(405, 'Method not allowed.');
+    const body = await readJson(request);
+    if (body instanceof Response) return body;
+    const result =
+      kind === 'layouts'
+        ? await poll.saveLayout(admin, owner, body.night)
+        : personId
+          ? await poll.moveToGroup(admin, owner, night, personId, body)
+          : await poll.setGroups(admin, owner, night, body);
+    return result.ok ? json(result.state) : fromFailure(result);
+  }
+
   // /organize: an officer's organizer token; /officers/<person>: the maker picking officers.
   if (parts[3] === 'organize' && parts.length === 4) {
     if (method !== 'POST') return error(405, 'Method not allowed.');
