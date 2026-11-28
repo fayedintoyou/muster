@@ -370,7 +370,11 @@ try {
 
   // Ana removes the alt: what she says next is on her main, and "out" still works.
   await api('PUT', `/api/polls/${pollId}/people/${ana.person.id}`, { alts: [] }, { authorization: `Bearer ${ana.token}` });
-  assert.equal((await press(ANA, pollButton('out'))).body.type, 7, 'out, after the alt she was on is gone');
+  const anaSpecs = await press(ANA, pollButton('change spec'));
+  const fury = buttonsOf(anaSpecs.body.data).find((b) => b.label === 'fury');
+  assert.match((await press(ANA, fury.custom_id)).body.data.content, /on your main, fury warrior/, 'a spec, after the alt she was on is gone');
+  assert.deepEqual((await api('GET', `/api/polls/${pollId}`)).signups[`raid/${tomorrow}`].people[ana.person.id].specs, ['fury']);
+  assert.equal((await press(ANA, pollButton('out'))).body.type, 7, 'and out');
   state = await api('GET', `/api/polls/${pollId}`);
   assert.equal(state.signups[`raid/${tomorrow}`].people[ana.person.id].status, 'out');
   assert.equal(state.signups[`raid/${tomorrow}`].people[ana.person.id].as, undefined, 'and back on her main');

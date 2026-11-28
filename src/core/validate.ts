@@ -280,7 +280,8 @@ export function validateAlts(input: unknown, poll: Pick<PollSettings, 'classes' 
     if (out.some((a) => nameKey(a.name) === nameKey(name.value))) return fail(`${name.value} is there twice.`);
     const picked = validateClass(r.cls, r.specs, poll.classes);
     if (!picked.ok) return fail(`${name.value}: ${picked.error.charAt(0).toLowerCase()}${picked.error.slice(1)}`);
-    const id = typeof r.id === 'string' && before.some((a) => a.id === r.id) ? r.id : '';
+    // An id sent twice keeps it once; the other is a new alt.
+    const id = typeof r.id === 'string' && before.some((a) => a.id === r.id) && !out.some((a) => a.id === r.id) ? r.id : '';
     out.push({ id, name: name.value, ...picked.value, roles: rolesFor(picked.value.cls, picked.value.specs).filter((x) => poll.roles.includes(x)) });
   }
   return ok(out);

@@ -996,6 +996,10 @@ export class PollObject extends DurableObject<Env> {
     const events = this.events();
     if (!events.some((o) => o.id === eventId)) return fail(404, 'That event doesn’t exist any more.');
     this.kv.put('events', events.filter((o) => o.id !== eventId));
+    // Its groups go with it. Its sign-ups stay a while, so the post can tell those who'd signed up.
+    for (const [k] of this.kv.list({ prefix: `g:${eventId}/` })) this.kv.delete(k);
+    const { [eventId]: _gone, ...layouts } = this.kv.get<Record<string, Groups>>('layouts') ?? {};
+    this.kv.put('layouts', layouts);
     this.bump();
     this.touch();
     return { ok: true, state: this.state()! };

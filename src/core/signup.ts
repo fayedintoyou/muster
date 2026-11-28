@@ -103,9 +103,9 @@ export function checkPlaying(person: Pick<Person, 'cls' | 'alts'>, change: Signu
   const as = change.as === undefined ? before?.as : change.as;
   const alt = as ? person.alts.find((a) => a.id === as) : undefined;
   if (as && !alt) {
+    if (change.as !== undefined) return { ok: false, error: 'That alt isn’t one of yours any more.' };
     // An alt removed since signing up on it: anything else said for the night is on the main.
-    if (change.as === undefined) return { ok: true, value: { ...change, as: null, specs: null } };
-    return { ok: false, error: 'That alt isn’t one of yours any more.' };
+    change = { ...change, as: null };
   }
   if (!change.specs) return { ok: true, value: change };
   const cls = alt?.cls ?? person.cls;
