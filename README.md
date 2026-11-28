@@ -20,6 +20,10 @@ in their own time zone, and muster ranks the best windows.
 - **Leave people out, or mark them must come**: bench an alt, or only show windows the raid leader can make.
 - **Copy for Discord**: a `<t:…>` timestamp that Discord shows in each reader's own time.
 - **Link previews**: a poll's link unfurls in Discord with its name, nights and how many have answered.
+- **A Discord bot**: connect a channel from the organizer tab, and each raid night is posted ahead of time
+  with in, late, maybe and out buttons, pinging the team's role or people. The post edits itself as people
+  sign up on Discord or the page; called-off and moved nights, reminders, nudges for who hasn't answered,
+  and an organizer's seat or bench are all sent on their own.
 - **Edit later**: the browser that made the poll can change its name, nights, times or roles, remove
   people, or delete it, and can copy a private link to do the same from another device.
 

@@ -5,6 +5,7 @@ import { plural } from '../core/format';
 import { api } from './api';
 import { navigate } from './App';
 import { ClassName } from './ClassPicker';
+import { DiscordPanel } from './DiscordPanel';
 import { PollForm } from './PollForm';
 import { useCopied } from './copy';
 import { store } from './store';
@@ -118,6 +119,8 @@ export function Organizer({
       </section>
 
       {maker && <Officers state={state} admin={admin} onState={onState} />}
+
+      <DiscordPanel state={state} admin={admin} />
 
       <section className="org-section" aria-labelledby="org-share">
         <h3 className="org-title" id="org-share">

@@ -1,0 +1,376 @@
+// End-to-end run of the Discord bot against `wrangler dev`, with a stand-in for Discord: it signs
+// interactions with its own Ed25519 key, the way Discord does, and records every post, edit and private
+// message the bot sends. An organizer connects a channel with a code, raid nights post with sign-up buttons
+// and pings, taps sign people up, the web and the card stay in step, and changes are announced. The
+// organizer tab's Discord section is checked in Chrome. Screenshots go to e2e/shots/.
+
+import { spawn } from 'node:child_process';
+import { createServer } from 'node:http';
+import { generateKeyPairSync, sign } from 'node:crypto';
+import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import assert from 'node:assert/strict';
+import { chromium } from 'playwright-core';
+
+const CHROME =
+  process.env.CHROME ??
+  (process.platform === 'darwin'
+    ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+    : '/usr/bin/google-chrome');
+const SHOTS = new URL('./shots/', import.meta.url).pathname;
+mkdirSync(SHOTS, { recursive: true });
+
+const GUILD = '900000000000000001';
+const CHANNEL = '900000000000000002';
+const ROLE = '900000000000000003';
+const ANA = '100000000000000001';
+const BO = '100000000000000002';
+const CY = '100000000000000003';
+const STRANGER = '100000000000000009';
+
+const { publicKey, privateKey } = generateKeyPairSync('ed25519');
+const PUBLIC_HEX = publicKey.export({ format: 'der', type: 'spki' }).subarray(-32).toString('hex');
+
+// ---- The stand-in for Discord ----
+const sent = []; // { method, path, body }
+let discordUser = null;
+let nextMessage = 1;
+const fake = createServer((req, res) => {
+  const url = new URL(req.url, 'http://x');
+  let raw = '';
+  req.on('data', (d) => (raw += d));
+  req.on('end', () => {
+    const reply = (status, body) => res.writeHead(status, { 'content-type': 'application/json' }).end(JSON.stringify(body));
+    const path = url.pathname.replace('/api/v10/', '');
+    // OAuth2, for linking people the way the page does.
+    if (url.pathname === '/oauth2/authorize') {
+      const back = new URL(url.searchParams.get('redirect_uri'));
+      back.searchParams.set('code', discordUser.id);
+      back.searchParams.set('state', url.searchParams.get('state'));
+      return res.writeHead(302, { location: back.toString() }).end();
+    }
+    if (path === 'oauth2/token') return reply(200, { access_token: `at-${new URLSearchParams(raw).get('code')}` });
+    if (path === 'users/@me') return reply(200, { ...discordUser, id: req.headers.authorization.replace('Bearer at-', '') });
+    // The bot's own calls.
+    assert.equal(req.headers.authorization, 'Bot e2e-bot-token', `the bot uses its token for ${path}`);
+    const body = raw ? JSON.parse(raw) : undefined;
+    sent.push({ method: req.method, path, body });
+    if (path === `guilds/${GUILD}`) return reply(200, { id: GUILD, name: 'Lamplight' });
+    if (path === `channels/${CHANNEL}`) return reply(200, { id: CHANNEL, name: 'raids', guild_id: GUILD });
+    if (path === `guilds/${GUILD}/roles`) {
+      return reply(200, [
+        { id: GUILD, name: '@everyone', position: 0 },
+        { id: ROLE, name: 'Thursday 10', position: 2 },
+        { id: '900000000000000004', name: 'muster', managed: true, position: 1 },
+      ]);
+    }
+    if (path === 'users/@me/channels') return reply(200, { id: `dm-${body.recipient_id}` });
+    if (req.method === 'POST' && /^channels\/[\w-]+\/messages$/.test(path)) return reply(200, { id: `m${nextMessage++}` });
+    if (req.method === 'PATCH') return reply(200, { id: path.split('/').pop() });
+    reply(404, { message: 'Unknown' });
+  });
+});
+await new Promise((resolve) => fake.listen(0, '127.0.0.1', resolve));
+
+const store = mkdtempSync(join(tmpdir(), 'muster-bot-e2e-'));
+const port = 9000 + Math.floor(Math.random() * 200);
+const BASE = `http://127.0.0.1:${port}`;
+const vars = {
+  DISCORD_ORIGIN: `http://127.0.0.1:${fake.address().port}`,
+  DISCORD_CLIENT_SECRET: 'e2e-secret',
+  DISCORD_BOT_TOKEN: 'e2e-bot-token',
+  DISCORD_PUBLIC_KEY: PUBLIC_HEX,
+  SITE_ORIGIN: BASE,
+};
+const server = spawn(
+  'npx',
+  ['wrangler', 'dev', '--port', String(port), '--ip', '127.0.0.1', '--persist-to', store, ...Object.entries(vars).flatMap(([k, v]) => ['--var', `${k}:${v}`])],
+  { env: { ...process.env, WRANGLER_SEND_METRICS: 'false' }, stdio: ['ignore', 'pipe', 'pipe'], detached: true },
+);
+let logs = '';
+await new Promise((resolve, reject) => {
+  const timer = setTimeout(() => reject(new Error('wrangler dev did not start')), 60_000);
+  const onData = (d) => {
+    logs += d;
+    if (String(d).includes('Ready on')) {
+      clearTimeout(timer);
+      resolve();
+    }
+  };
+  server.stdout.on('data', onData);
+  server.stderr.on('data', onData);
+});
+
+// ---- Helpers ----
+const api = async (method, path, body, headers = {}) => {
+  const r = await fetch(`${BASE}${path}`, {
+    method,
+    headers: { 'content-type': 'application/json', ...headers },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const text = await r.text();
+  const json = text ? JSON.parse(text) : undefined;
+  if (!r.ok) throw new Error(`${method} ${path}: ${r.status} ${text}`);
+  return json;
+};
+
+/** An interaction, signed with the stand-in's key as Discord signs them. */
+async function interact(payload, { badSignature = false } = {}) {
+  const body = JSON.stringify(payload);
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const signature = sign(null, Buffer.from(timestamp + body), privateKey).toString('hex');
+  const r = await fetch(`${BASE}/discord/interactions`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-signature-ed25519': badSignature ? signature.replace(/^./, (c) => (c === '0' ? '1' : '0')) : signature,
+      'x-signature-timestamp': timestamp,
+    },
+    body,
+  });
+  return { status: r.status, body: r.status === 200 ? await r.json() : await r.text() };
+}
+const press = (user, customId) =>
+  interact({ type: 3, guild_id: GUILD, channel_id: CHANNEL, member: { user: { id: user } }, data: { custom_id: customId, component_type: 2 } });
+
+/** Waits for the bot to send something matching, from `after` on in the record. */
+async function waitFor(what, test, after = 0, ms = 15_000) {
+  const until = Date.now() + ms;
+  while (Date.now() < until) {
+    const hit = sent.slice(after).find(test);
+    if (hit) return hit;
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  throw new Error(`the bot never sent ${what}.\nSent: ${JSON.stringify(sent.map((s) => `${s.method} ${s.path}`))}\n${logs.slice(-3000)}`);
+}
+const embedText = (m) => JSON.stringify(m.body?.embeds ?? m.embeds ?? []);
+const buttonsOf = (body) => body.components.flatMap((row) => row.components);
+
+/** Links a new person to a Discord account the way the page does: sign in with Discord, then answer. */
+async function joinLinked(pollId, user, who) {
+  discordUser = { id: user, username: who.name.toLowerCase(), global_name: who.name };
+  const start = await fetch(`${BASE}/api/polls/${pollId}/discord`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+  const cookie = start.headers.get('set-cookie').split(';')[0];
+  const { url } = await start.json();
+  const toCallback = await fetch(url, { redirect: 'manual' });
+  const back = await fetch(toCallback.headers.get('location'), { redirect: 'manual', headers: { cookie } });
+  const hash = new URLSearchParams(new URL(back.headers.get('location')).hash.slice(1));
+  assert.equal(hash.get('discord'), 'none', 'not in the poll yet');
+  return api('POST', `/api/polls/${pollId}/people`, { ...who, discordTicket: hash.get('ticket') });
+}
+
+// Dates in the realm's time: a night tomorrow at 8pm, and one starting about an hour from now.
+const TZ = 'America/Chicago';
+const local = (instant) => {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+      .formatToParts(instant)
+      .map((p) => [p.type, p.value]),
+  );
+  return { date: `${parts.year}-${parts.month}-${parts.day}`, minute: Number(parts.hour) * 60 + Number(parts.minute) };
+};
+const now = Date.now();
+const days = [0, 1, 2].map((d) => local(now + d * 86_400_000).date);
+const tomorrow = days[1];
+const soon = local(now + 75 * 60_000);
+const soonSlot = `${soon.date}/${soon.minute - (soon.minute % 15)}`;
+
+const browser = await chromium.launch({ executablePath: CHROME, headless: true, args: ['--no-sandbox'] });
+try {
+  // ---- A poll, three people linked to Discord and one who isn't ----
+  const { id: pollId, admin } = await api('POST', '/api/polls', {
+    title: 'Barrow Deeps',
+    mode: 'dates',
+    days,
+    start: 0,
+    end: 0,
+    slot: 15,
+    tz: TZ,
+    realm: TZ,
+    roles: ['tank', 'healer', 'dps'],
+    classes: ['warrior', 'priest', 'mage', 'rogue'],
+    size: 10,
+    makeup: { tank: 2, healer: 3 },
+  });
+  const adminHeaders = { 'x-admin-token': admin };
+  const ana = await joinLinked(pollId, ANA, { name: 'Ana', cls: 'warrior', specs: ['protection'] });
+  const bo = await joinLinked(pollId, BO, { name: 'Bo', cls: 'priest', specs: ['holy'] });
+  const cy = await joinLinked(pollId, CY, { name: 'Cy', cls: 'mage', specs: ['frost'] });
+  const dee = await api('POST', `/api/polls/${pollId}/people`, { name: 'Dee', cls: 'rogue', specs: ['combat'] });
+
+  // ---- Discord's checks: a bad signature is turned away, a PING answered ----
+  assert.equal((await interact({ type: 1 }, { badSignature: true })).status, 401, 'a bad signature is refused');
+  assert.deepEqual((await interact({ type: 1 })).body, { type: 1 }, 'PING gets PONG');
+
+  // ---- Connecting: the organizer gets a code, and /muster connect in the channel uses it ----
+  const before = await api('GET', `/api/polls/${pollId}/bot`, undefined, adminHeaders);
+  assert.equal(before.link, null, 'not connected yet');
+  assert.match(before.invite, /scope=bot\+applications\.commands/, 'an invite to add the bot');
+  await assert.rejects(api('GET', `/api/polls/${pollId}/bot`), /403/, 'only organizers see the settings');
+  const { code } = await api('POST', `/api/polls/${pollId}/bot/code`, undefined, adminHeaders);
+  const connect = (c) =>
+    interact({
+      type: 2,
+      guild_id: GUILD,
+      channel_id: CHANNEL,
+      member: { user: { id: ANA } },
+      data: { name: 'muster', options: [{ type: 1, name: 'connect', options: [{ type: 3, name: 'code', value: c }] }] },
+    });
+  const wrong = await connect(`${pollId}-xxxxxxxxxxxx`);
+  assert.match(wrong.body.data.content, /expired or was already used/, 'a wrong code is refused');
+  assert.equal(wrong.body.data.flags, 64, 'privately');
+  const connected = await connect(code);
+  assert.match(connected.body.data.content, /Connected: raid posts for \*\*Barrow Deeps\*\* go here/);
+  assert.match((await connect(code)).body.data.content, /already used/, 'a code works once');
+  const info = await api('GET', `/api/polls/${pollId}/bot`, undefined, adminHeaders);
+  assert.equal(info.link.channelName, 'raids');
+  assert.equal(info.link.guildName, 'Lamplight');
+  assert.deepEqual(info.roles, [{ id: ROLE, name: 'Thursday 10' }], 'roles to ping, without @everyone or the bot’s own');
+
+  // ---- A team that pings its role, and its raid tomorrow: posted at once, inside the 6-day lead ----
+  let state = await api('POST', `/api/polls/${pollId}/teams`, { name: 'Thursday 10', members: [ana.person.id, bo.person.id], size: 10, makeup: { tank: 2, healer: 3 } }, adminHeaders);
+  const team = state.teams[0];
+  await api('PUT', `/api/polls/${pollId}/bot`, { pings: { [team.id]: ROLE } }, adminHeaders);
+  let mark = sent.length;
+  await api('PUT', `/api/polls/${pollId}/teams/${team.id}/raid`, { start: `${tomorrow}/1200`, minutes: 180 }, adminHeaders);
+  const teamPost = await waitFor('the team’s raid post', (m) => m.method === 'POST' && m.path === `channels/${CHANNEL}/messages` && embedText(m).includes('Thursday 10'), mark);
+  assert.equal(teamPost.body.content, `<@&${ROLE}>`, 'the new post pings the team’s role');
+  assert.deepEqual(teamPost.body.allowed_mentions, { roles: [ROLE] }, 'and only that role');
+  const teamButtons = buttonsOf(teamPost.body);
+  assert.deepEqual(teamButtons.map((b) => b.label), ['in', 'late', 'maybe', 'out', 'muster']);
+  assert.match(embedText(teamPost), /<t:\d+:F>/, 'times as Discord timestamps');
+  assert.match(embedText(teamPost), /8–11pm server time/, 'and in server time');
+  const teamMessage = `m${nextMessage - 1}`;
+  const button = (label) => teamButtons.find((b) => b.label === label).custom_id;
+
+  // ---- The poll's own raid, which pings everyone here linked to Discord ----
+  mark = sent.length;
+  await api('PUT', `/api/polls/${pollId}/raid`, { start: `${tomorrow}/1140`, minutes: 120 }, adminHeaders);
+  const pollPost = await waitFor('the poll raid’s post', (m) => m.method === 'POST' && embedText(m).includes('Barrow Deeps'), mark);
+  assert.deepEqual(pollPost.body.allowed_mentions.users.sort(), [ANA, BO, CY], 'each linked person, by mention');
+  assert.equal((await api('GET', `/api/polls/${pollId}`)).signups[`raid/${tomorrow}`], undefined, 'posting signs no one up');
+
+  // ---- Taps: in, late with how late, someone muster doesn't know ----
+  const anaIn = await press(ANA, button('in'));
+  assert.equal(anaIn.body.type, 7, 'a tap edits the card in place');
+  assert.match(embedText(anaIn.body.data), /Tanks 1\/2.*Ana · warrior/, 'Ana is seated as a tank');
+  state = await api('GET', `/api/polls/${pollId}`);
+  assert.equal(state.signups[`${team.id}/${tomorrow}`].people[ana.person.id].status, 'in', 'the page sees the tap');
+
+  const boLate = await press(BO, button('late'));
+  assert.equal(boLate.body.type, 4);
+  assert.equal(boLate.body.data.flags, 64, 'how late is asked privately');
+  const steps = buttonsOf(boLate.body.data);
+  assert.deepEqual(steps.map((b) => b.label), ['15 min', '30 min', '45 min', '1 hour', '1.5 hours']);
+  mark = sent.length;
+  const boThirty = await press(BO, steps[1].custom_id);
+  assert.equal(boThirty.body.type, 7, 'the private row is replaced');
+  assert.match(boThirty.body.data.content, /30 minutes late/);
+  const edited = await waitFor('the card edited for Bo', (m) => m.method === 'PATCH' && m.path === `channels/${CHANNEL}/messages/${teamMessage}` && embedText(m).includes('Bo'), mark);
+  assert.match(embedText(edited), /Bo · priest \(30m late\)/, 'the card shows Bo, late');
+
+  const stranger = await press(STRANGER, button('in'));
+  assert.equal(stranger.body.data.flags, 64);
+  assert.match(stranger.body.data.content, /doesn’t know your Discord account/, 'someone not linked is told how to link');
+  assert.equal(buttonsOf(stranger.body.data)[0].url, `${BASE}/e/${pollId}`);
+
+  // ---- The web and the card stay in step: Cy signs up on the page ----
+  mark = sent.length;
+  await api('PUT', `/api/polls/${pollId}/signups/${team.id}/${tomorrow}/${cy.person.id}`, { status: 'in' }, { authorization: `Bearer ${cy.token}` });
+  await waitFor('the card edited for Cy', (m) => m.method === 'PATCH' && m.path.endsWith(teamMessage) && embedText(m).includes('Cy · mage'), mark);
+
+  // ---- An organizer benches Cy: Cy hears privately ----
+  mark = sent.length;
+  await api('PUT', `/api/polls/${pollId}/moves/${team.id}/${tomorrow}/${cy.person.id}`, { move: 'bench' }, adminHeaders);
+  const dm = await waitFor('a private message to Cy', (m) => m.path === `channels/dm-${CY}/messages`, mark);
+  assert.match(dm.body.content, /on standby for \*\*Thursday 10/);
+  await waitFor('the card showing Cy on standby', (m) => m.method === 'PATCH' && m.path.endsWith(teamMessage) && /Standby 1/.test(embedText(m)), mark);
+
+  // ---- A raid within the hour: a reminder to those coming, and a private nudge to who hasn't answered ----
+  state = await api('POST', `/api/polls/${pollId}/teams`, { name: 'Alt run', members: [ana.person.id, bo.person.id, dee.person.id], size: 10, makeup: {} }, adminHeaders);
+  const alt = state.teams.find((t) => t.name === 'Alt run');
+  await api('PUT', `/api/polls/${pollId}/bot`, { pings: { [alt.id]: 'none' } }, adminHeaders);
+  mark = sent.length;
+  await api('PUT', `/api/polls/${pollId}/teams/${alt.id}/raid`, { start: soonSlot, minutes: 60 }, adminHeaders);
+  const altPost = await waitFor('the alt run’s post', (m) => m.method === 'POST' && embedText(m).includes('Alt run'), mark);
+  assert.equal(altPost.body.content, undefined, 'a raid set to ping no one pings no one');
+  assert.deepEqual(altPost.body.allowed_mentions, { parse: [] });
+  await press(ANA, buttonsOf(altPost.body).find((b) => b.label === 'in').custom_id);
+  mark = sent.length;
+  await api('PUT', `/api/polls/${pollId}/bot`, { remind: 120, nudge: 12 }, adminHeaders);
+  const reminder = await waitFor('the reminder', (m) => m.method === 'POST' && /Alt run.*starts <t:\d+:R>/.test(m.body?.content ?? ''), mark);
+  assert.deepEqual(reminder.body.allowed_mentions, { users: [ANA] }, 'the reminder pings only those coming');
+  const nudge = await waitFor('a nudge to Bo', (m) => m.path === `channels/dm-${BO}/messages` && /Alt run/.test(m.body?.content ?? ''), mark);
+  assert.match(nudge.body.content, /Coming\?/);
+  await new Promise((r) => setTimeout(r, 1500));
+  assert.equal(sent.slice(mark).filter((m) => /starts <t:/.test(m.body?.content ?? '')).length, 1, 'one reminder, not one per alarm');
+  assert.equal(sent.slice(mark).filter((m) => m.path === `channels/dm-${ANA}/messages`).length, 0, 'no nudge for someone who answered');
+  assert.equal(sent.slice(mark).filter((m) => m.path.includes('dm-') && m.path.includes('Dee')).length, 0, 'Dee isn’t on Discord');
+
+  // ---- Calling a night off, moving a raid, and unlocking one: cards change and people are told ----
+  mark = sent.length;
+  await api('PUT', `/api/polls/${pollId}/teams/${team.id}/raid`, { start: `${tomorrow}/1200`, minutes: 180, skips: [tomorrow] }, adminHeaders);
+  await waitFor('the called-off card', (m) => m.method === 'PATCH' && m.path.endsWith(teamMessage) && /Called off/.test(embedText(m)), mark);
+  const off = await waitFor('the called-off notice', (m) => m.method === 'POST' && /is called off/.test(m.body?.content ?? ''), mark);
+  assert.deepEqual(off.body.allowed_mentions.users.sort(), [ANA, BO, CY], 'everyone signed up hears, standby too, by name rather than the role');
+
+  await press(BO, pollPost.body.components[0].components[0].custom_id);
+  mark = sent.length;
+  await api('PUT', `/api/polls/${pollId}/raid`, { start: `${tomorrow}/1170`, minutes: 120 }, adminHeaders);
+  const moved = await waitFor('the moved notice', (m) => m.method === 'POST' && /has moved/.test(m.body?.content ?? ''), mark);
+  assert.deepEqual(moved.body.allowed_mentions, { users: [BO] });
+
+  mark = sent.length;
+  await api('DELETE', `/api/polls/${pollId}/teams/${alt.id}/raid`, undefined, adminHeaders);
+  await waitFor('the unlocked card', (m) => m.method === 'PATCH' && /Moved: Alt run/.test(embedText(m)), mark);
+  await waitFor('the unlocked notice', (m) => m.method === 'POST' && /Alt run.*no longer on/.test(m.body?.content ?? ''), mark);
+
+  // ---- The organizer tab, connected and not, on a phone and a desktop ----
+  for (const [name, viewport] of [
+    ['phone', { width: 390, height: 844 }],
+    ['desktop', { width: 1280, height: 900 }],
+  ]) {
+    const context = await browser.newContext({ viewport, timezoneId: TZ, deviceScaleFactor: 2 });
+    await context.addInitScript(() => localStorage.setItem('muster:tour', 'done'));
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: BASE });
+    const page = await context.newPage();
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    await page.goto(`${BASE}/e/${pollId}#admin=${admin}`);
+    await page.click('.tabs button:text("organizer")');
+    await page.waitForSelector('.org-discord .org-bot');
+    assert.match(await page.locator('.org-discord').innerText(), /Raid posts go to #raids in Lamplight/);
+    const ping = page.locator('.org-discord label', { hasText: 'New posts for Thursday 10 ping' }).locator('select');
+    assert.equal(await ping.inputValue(), ROLE, 'the team’s role is picked');
+    await page.locator('.org-discord').scrollIntoViewIfNeeded();
+    await page.locator('.org-discord').screenshot({ path: `${SHOTS}bot-connected-${name}.png` });
+
+    const { id: freshId, admin: freshAdmin } = await api('POST', '/api/polls', { title: 'Onyxia', mode: 'weekly', days: ['w4'], start: 1200, end: 1380, slot: 30, tz: TZ });
+    await page.goto(`${BASE}/e/${freshId}#admin=${freshAdmin}`);
+    await page.click('.tabs button:text("organizer")');
+    await page.click('.org-discord button:text("get a code to connect a channel")');
+    const command = await page.locator('.org-command code').innerText();
+    assert.match(command, new RegExp(`^/muster connect code:${freshId}-[\\w-]{12}$`), 'the command to send in Discord');
+    await page.locator('.org-discord').screenshot({ path: `${SHOTS}bot-connect-${name}.png` });
+    if (name === 'phone') {
+      // Sending it in Discord: the tab notices on its own.
+      const fresh = await connect(command.replace('/muster connect code:', ''));
+      assert.match(fresh.body.data.content, /Onyxia/);
+      await page.waitForSelector('.org-discord .org-bot', { timeout: 10_000 });
+    }
+    assert.deepEqual(errors, [], `no page errors on the ${name}`);
+    await context.close();
+  }
+
+  console.log('bot e2e: all checks passed');
+} finally {
+  await browser.close();
+  fake.close();
+  try {
+    process.kill(-server.pid, 'SIGTERM');
+  } catch {
+    // Already gone.
+  }
+  rmSync(store, { recursive: true, force: true });
+}

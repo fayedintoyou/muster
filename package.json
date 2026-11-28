@@ -12,7 +12,7 @@
     "pretypecheck": "wrangler types worker/worker-configuration.d.ts >/dev/null",
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.worker.json --noEmit",
     "test": "vitest run",
-    "test:e2e": "vite build && node e2e/run.mjs",
+    "test:e2e": "vite build && node e2e/run.mjs && node e2e/bot.mjs",
     "types": "wrangler types worker/worker-configuration.d.ts",
     "art": "node scripts/art.mjs",
     "deploy": "vite build && wrangler deploy",

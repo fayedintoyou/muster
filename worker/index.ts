@@ -5,6 +5,7 @@ import { auth, error, fromFailure, json } from './http';
 import { validateSettings } from '../src/core/validate';
 import { POLL_RAID } from '../src/core/signup';
 import { describePoll } from './describe';
+import { botApi, interactions } from './bot';
 
 export { PollObject };
 
@@ -68,6 +69,8 @@ async function api(request: Request, env: Env, url: URL): Promise<Response> {
     }
     return error(405, 'Method not allowed.');
   }
+
+  if (parts[3] === 'bot') return botApi(request, env, id, parts.slice(4), () => readJson(request));
 
   if (parts[3] === 'discord' && parts.length === 4) {
     if (method !== 'POST') return error(405, 'Method not allowed.');
@@ -271,6 +274,7 @@ export default {
     try {
       if (url.pathname.startsWith('/api/')) return await api(request, env, url);
       if (url.pathname === '/auth/discord/callback') return await discordCallback(request, env, url);
+      if (url.pathname === '/discord/interactions') return await interactions(request, env, url);
       if (url.pathname.startsWith('/e/') && (request.method === 'GET' || request.method === 'HEAD')) {
         return await pollPage(request, env, url);
       }

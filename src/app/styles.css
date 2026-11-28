@@ -1041,6 +1041,15 @@ button.row-head:hover { color: var(--lamp); }
 .org-do { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 0.4rem 0 0; font-size: 0.9375rem; }
 .org-do input { flex: 1 1 10rem; min-width: 0; }
 .org-people .error { grid-column: 1 / -1; margin: 0.3rem 0 0; }
+.org-steps { margin: 0.6rem 0 0; padding-left: 1.25rem; display: grid; gap: 0.9rem; }
+.org-steps li { padding-left: 0.25rem; }
+.org-steps .button.discord { display: inline-flex; gap: 0.5rem; align-items: center; text-decoration: none; }
+.org-command { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 0.4rem 0; }
+.org-command code { font-family: var(--mono); font-size: 0.8125rem; padding: 0.3rem 0.5rem; border: 1px solid var(--line); border-radius: 4px; overflow-wrap: anywhere; }
+.org-steps .hint { display: block; }
+.org-bot { display: grid; gap: 0.75rem; margin: 0.9rem 0 0.5rem; }
+.org-bot label { display: grid; gap: 0.3rem; font-size: 0.9375rem; }
+.org-bot select { width: 100%; max-width: 22rem; }
 .org-edit summary {
   cursor: pointer;
   font-family: var(--mono);
